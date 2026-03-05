@@ -40,33 +40,30 @@ class _TeacherEditStemChallengeScreenState
   late TextEditingController _titleController;
   late TextEditingController _pointsController;
   final TextEditingController _materialController = TextEditingController();
-
-  // --- ADDED: Tags Controller ---
   late TextEditingController _tagsController;
 
   // --- STATE ---
   late StemChallengeModel _challenge;
-
-  // Category is now fixed (Read-Only)
   late String _fixedCategory;
-
   late String _selectedDifficulty;
   final List<String> _difficultyLevels = ['Easy', 'Medium', 'Hard'];
+
+  // --- AGE SELECTION STATE ---
+  String? _selectedYear;
+  final List<String> _individualYears = ["6", "7", "8", "9", "10", "11", "12"];
 
   File? _newImageFile;
   String? _existingImageUrl;
 
   late List<String> _materials;
   late List<String> _steps;
-
-  // --- ADDED: Sensitivity Flag ---
   late bool _isSensitive;
 
   @override
   void initState() {
     super.initState();
 
-    // 1. Parse Data
+    // 1. Parse Data and FIX the reported error by ensuring ageGroup is parsed
     if (widget.challengeData is StemChallengeModel) {
       _challenge = widget.challengeData;
     } else {
@@ -82,32 +79,35 @@ class _TeacherEditStemChallengeScreenState
         imageUrl: map['imageUrl'],
         materials: List<String>.from(map['materials'] ?? []),
         steps: List<String>.from(map['steps'] ?? []),
-        tags: List<String>.from(map['tags'] ?? []), // ADDED: Load tags
-        isSensitive: map['isSensitive'] ?? false, // ADDED: Load sensitivity
+        tags: List<String>.from(map['tags'] ?? []),
+        isSensitive: map['isSensitive'] ?? false,
+        ageGroup: map['ageGroup'] ?? '6 - 8', // Fixed missing parameter
       );
     }
-    // --- NOTIFICATION LOGIC ---
+
+    // 2. Initialize Controllers with existing data
     _titleController = TextEditingController(text: _challenge.title);
-    _pointsController = TextEditingController(
-      text: _challenge.points.toString(),
-    );
+    _pointsController = TextEditingController(text: _challenge.points.toString());
+    _tagsController = TextEditingController(text: _challenge.tags.join(', '));
 
-    // --- ADDED: Initialize tags controller ---
-    _tagsController = TextEditingController(
-      text: _challenge.tags?.join(', ') ?? '',
-    );
-
-    // Initialize Fixed Category
+    // 3. Initialize UI State
     _fixedCategory = _challenge.category;
-
     _selectedDifficulty = _challenge.difficulty;
-
     _materials = List<String>.from(_challenge.materials);
     _steps = List<String>.from(_challenge.steps);
     _existingImageUrl = _challenge.imageUrl;
+    _isSensitive = _challenge.isSensitive;
 
-    // --- ADDED: Initialize sensitivity ---
-    _isSensitive = _challenge.isSensitive ?? false;
+    // 4. Initialize selected year based on current database ageGroup range
+    if (_challenge.ageGroup == "6 - 8") {
+      _selectedYear = "6";
+    } else if (_challenge.ageGroup == "8 - 10") {
+      _selectedYear = "9";
+    } else if (_challenge.ageGroup == "10 - 12") {
+      _selectedYear = "11";
+    } else {
+      _selectedYear = "6";
+    }
   }
 
   @override
@@ -115,107 +115,83 @@ class _TeacherEditStemChallengeScreenState
     _titleController.dispose();
     _pointsController.dispose();
     _materialController.dispose();
-    _tagsController.dispose(); // ADDED: Dispose tags controller
+    _tagsController.dispose();
     super.dispose();
   }
 
-  Future<void> _sendClassNotification(
-    String teacherId,
-    String challengeTitle,
-  ) async {
-    const String backendUrl = ApiConstants.notifyChildClassEndPoints;
+  // Logic: Map individual year selection to broad backend ranges
+  String _mapYearToClass(String year) {
+    int age = int.parse(year);
+    if (age >= 6 && age <= 8) return "6 - 8";
+    if (age >= 9 && age <= 10) return "8 - 10";
+    if (age >= 11 && age <= 12) return "10 - 12";
+    return "6 - 8";
+  }
 
+  Future<void> _sendClassNotification(
+      String teacherId,
+      String challengeTitle,
+      String ageGroup,
+      ) async {
+    const String backendUrl = ApiConstants.notifyChildClassEndPoints;
     try {
-      final response = await http.post(
+      await http.post(
         Uri.parse(backendUrl),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "teacherId": teacherId,
           "type": "STEM Challenge",
           "title": "STEM Challenge Updated: $challengeTitle ✏️",
-          "body":
-              "Your teacher updated the STEM challenge: $challengeTitle. Check the changes!",
+          "body": "The STEM challenge for Group $ageGroup has been updated!",
+          "ageGroup": ageGroup,
         }),
       );
-
-      if (response.statusCode == 200) {
-        print("✅ STEM Challenge Update Notification sent successfully");
-      } else {
-        print("❌ Notification failed: ${response.body}");
-      }
     } catch (e) {
-      print("❌ Error calling notification backend: $e");
+      debugPrint("❌ Notification Error: $e");
     }
   }
 
-  // --- UPDATE LOGIC (Simplified - No Category Change) ---
   Future<void> _updateChallenge() async {
-    if (_titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please enter a title")));
-      return;
-    }
-    if (_pointsController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please enter points")));
+    if (_titleController.text.trim().isEmpty || _selectedYear == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a title and select Target Age")),
+      );
       return;
     }
 
-    // --- ADDED: Process tags like in Add Screen ---
+    String mappedAgeGroup = _mapYearToClass(_selectedYear!);
+
     List<String> tagsList = _tagsController.text
         .split(',')
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList();
 
-    // --- ADDED: Sensitivity control logic ---
-    if (_isSensitive && !tagsList.contains('scary')) {
-      tagsList.add('scary');
-    }
-    if (!_isSensitive) {
-      tagsList.remove('scary');
-    }
+    if (_isSensitive && !tagsList.contains('scary')) tagsList.add('scary');
+    if (!_isSensitive) tagsList.remove('scary');
 
     final String? finalImage = _newImageFile?.path ?? _existingImageUrl;
 
     String? teacherId = await SharedPreferencesHelper.instance.getUserId();
-    if (teacherId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Error: No Teacher ID. Re-login."),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
+    if (teacherId == null) return;
 
     final updatedChallenge = _challenge.copyWith(
       title: _titleController.text.trim(),
-      // Category remains unchanged
       category: _fixedCategory,
       difficulty: _selectedDifficulty,
       points: int.tryParse(_pointsController.text.trim()) ?? 0,
       imageUrl: finalImage,
       materials: _materials,
       steps: _steps,
-      // --- ADDED: Include tags and sensitivity ---
       tags: tagsList,
       isSensitive: _isSensitive,
+      ageGroup: mappedAgeGroup,
     );
-    // Send notification only if not sensitive
-    if (!_isSensitive) {
-      await _sendClassNotification(teacherId, updatedChallenge.title);
-    }
 
-    // Call update directly (No need for oldCategory since it hasn't changed)
-    await ref
-        .read(teacherStemViewModelProvider.notifier)
-        .updateChallenge(updatedChallenge);
+    await ref.read(teacherStemViewModelProvider.notifier).updateChallenge(updatedChallenge);
 
     if (!_isSensitive) {
-      await _sendClassNotification(teacherId, updatedChallenge.title);
+      await _sendClassNotification(teacherId, updatedChallenge.title, mappedAgeGroup);
     }
   }
 
@@ -226,24 +202,13 @@ class _TeacherEditStemChallengeScreenState
     ref.listen(teacherStemViewModelProvider, (previous, next) {
       if (next.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.errorMessage!),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(next.errorMessage!), backgroundColor: Colors.red),
         );
       }
       if (next.isSuccess) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isSensitive
-                  ? "Challenge Updated! (No notification - marked sensitive)"
-                  : "Challenge Updated & Class Notified!",
-            ),
-            backgroundColor: Colors.green,
-          ),
+          const SnackBar(content: Text("Challenge Updated Successfully!"), backgroundColor: Colors.green),
         );
-
         ref.read(teacherStemViewModelProvider.notifier).resetSuccess();
         Navigator.pop(context);
       }
@@ -263,10 +228,11 @@ class _TeacherEditStemChallengeScreenState
                 SizedBox(height: 2.h),
 
                 _buildLabel("Challenge Title"),
-                _buildTextField(
-                  controller: _titleController,
-                  hint: "Enter challenge title",
-                ),
+                _buildTextField(controller: _titleController, hint: "Enter challenge title"),
+                SizedBox(height: 2.h),
+
+                _buildLabel("Target Age (Years)"),
+                _buildAgeDropdown(),
                 SizedBox(height: 2.h),
 
                 _buildLabel("Difficulty Level"),
@@ -276,59 +242,31 @@ class _TeacherEditStemChallengeScreenState
                 _buildLabel("Points"),
                 SizedBox(
                   width: 30.w,
-                  child: _buildTextField(
-                    controller: _pointsController,
-                    hint: "0",
-                    isNumber: true,
-                    isCenter: true,
-                  ),
+                  child: _buildTextField(controller: _pointsController, hint: "0", isNumber: true, isCenter: true),
                 ),
                 SizedBox(height: 2.h),
 
-                // --- CATEGORY (READ ONLY) ---
                 _buildLabel("Category (Fixed)"),
                 Container(
                   width: double.infinity,
                   padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 2.h),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100, // Greyed out look
+                    color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: _borderGrey),
                   ),
-                  child: Text(
-                    _fixedCategory,
-                    style: GoogleFonts.poppins(
-                      fontSize: 16.sp,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
+                  child: Text(_fixedCategory, style: GoogleFonts.poppins(fontSize: 16.sp, fontWeight: FontWeight.w600, color: Colors.grey.shade600)),
                 ),
                 SizedBox(height: 2.h),
 
-                // --- ADDED: Tags Field ---
                 _buildLabel("Tags (comma-separated)"),
-                _buildTextField(
-                  controller: _tagsController,
-                  hint: "e.g. chemicals, outdoor, tools, engineering",
-                ),
+                _buildTextField(controller: _tagsController, hint: "e.g. chemicals, outdoor, tools"),
                 SizedBox(height: 2.h),
 
-                // --- ADDED: Sensitivity Switch ---
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    "Mark as Sensitive Content",
-                    style: GoogleFonts.poppins(
-                      fontSize: 15.sp,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.red.shade400,
-                    ),
-                  ),
-                  subtitle: Text(
-                    "If enabled, this challenge will be blocked for younger children.",
-                    style: GoogleFonts.poppins(fontSize: 12.sp),
-                  ),
+                  title: Text("Mark as Sensitive Content", style: GoogleFonts.poppins(fontSize: 15.sp, fontWeight: FontWeight.w600, color: Colors.red.shade400)),
+                  subtitle: Text("If enabled, this challenge will be blocked for younger children.", style: GoogleFonts.poppins(fontSize: 12.sp)),
                   value: _isSensitive,
                   onChanged: (v) => setState(() => _isSensitive = v),
                   activeThumbColor: Colors.red,
@@ -338,37 +276,27 @@ class _TeacherEditStemChallengeScreenState
                 _buildImageUploadBox(),
                 SizedBox(height: 4.h),
 
-                _buildSectionHeader("Materials / Apparatus Required"),
+                _buildSectionHeader("Materials Required"),
                 SizedBox(height: 2.h),
                 _buildMaterialsWrap(),
                 SizedBox(height: 1.5.h),
-                _buildDashedAddButton(
-                  label: "Add Material",
-                  onTap: _showAddMaterialDialog,
-                ),
+                _buildDashedAddButton(label: "Add Material", onTap: _showAddMaterialDialog),
                 SizedBox(height: 4.h),
 
-                _buildSectionHeader("Step-by-Step Instructions"),
+                _buildSectionHeader("Instructions"),
                 SizedBox(height: 2.h),
                 _buildStepsList(),
                 SizedBox(height: 1.5.h),
-                _buildDashedAddButton(
-                  label: "Add Step",
-                  onTap: _showAddStepDialog,
-                ),
+                _buildDashedAddButton(label: "Add Step", onTap: _showAddStepDialog),
 
                 SizedBox(height: 5.h),
-
                 _buildFooterButtons(viewModelState.isLoading),
                 SizedBox(height: 5.h),
               ],
             ),
           ),
           if (viewModelState.isLoading)
-            Container(
-              color: Colors.black54,
-              child: const Center(child: CircularProgressIndicator()),
-            ),
+            Container(color: Colors.black54, child: const Center(child: CircularProgressIndicator(color: Colors.white))),
         ],
       ),
     );
@@ -376,74 +304,54 @@ class _TeacherEditStemChallengeScreenState
 
   // --- WIDGET BUILDERS ---
 
+  Widget _buildAgeDropdown() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 4.w),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FA),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _borderGrey),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedYear,
+          isExpanded: true,
+          icon: Icon(Icons.keyboard_arrow_down, color: _primaryBlue, size: 24.sp),
+          items: _individualYears.map((y) => DropdownMenuItem(
+              value: y,
+              child: Text("$y Years Old", style: GoogleFonts.poppins(fontSize: 15.sp, color: _textDark, fontWeight: FontWeight.w500))
+          )).toList(),
+          onChanged: (val) => setState(() => _selectedYear = val!),
+        ),
+      ),
+    );
+  }
+
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.black),
-        onPressed: () => Navigator.pop(context),
-      ),
+      leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.black), onPressed: () => Navigator.pop(context)),
       centerTitle: true,
       title: Column(
         children: [
-          Text(
-            "Edit STEM Challenge",
-            style: GoogleFonts.poppins(
-              color: _textDark,
-              fontSize: 18.sp,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          Text("Edit STEM Challenge", style: GoogleFonts.poppins(color: _textDark, fontSize: 18.sp, fontWeight: FontWeight.w700)),
           SizedBox(height: 0.5.h),
-          // Category Badge in AppBar
           Container(
             padding: EdgeInsets.symmetric(horizontal: 3.w, vertical: 0.5.h),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              _fixedCategory,
-              style: GoogleFonts.poppins(
-                color: _primaryBlue,
-                fontSize: 14.sp,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
+            child: Text(_fixedCategory, style: GoogleFonts.poppins(color: _primaryBlue, fontSize: 14.sp, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title) => Text(
-    title,
-    style: GoogleFonts.poppins(
-      fontSize: 17.sp,
-      fontWeight: FontWeight.w700,
-      color: Colors.black,
-    ),
-  );
+  Widget _buildSectionHeader(String title) => Text(title, style: GoogleFonts.poppins(fontSize: 17.sp, fontWeight: FontWeight.w700, color: Colors.black));
 
-  Widget _buildLabel(String text) => Padding(
-    padding: EdgeInsets.only(bottom: 1.h),
-    child: Text(
-      text,
-      style: GoogleFonts.poppins(
-        fontSize: 15.sp,
-        fontWeight: FontWeight.w600,
-        color: _textDark,
-      ),
-    ),
-  );
+  Widget _buildLabel(String text) => Padding(padding: EdgeInsets.only(bottom: 1.h), child: Text(text, style: GoogleFonts.poppins(fontSize: 15.sp, fontWeight: FontWeight.w600, color: _textDark)));
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String hint,
-    bool isNumber = false,
-    bool isCenter = false,
-  }) {
+  Widget _buildTextField({required TextEditingController controller, required String hint, bool isNumber = false, bool isCenter = false}) {
     return TextField(
       controller: controller,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
@@ -451,30 +359,17 @@ class _TeacherEditStemChallengeScreenState
       style: GoogleFonts.poppins(fontSize: 16.sp, fontWeight: FontWeight.w500),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: GoogleFonts.poppins(
-          color: Colors.grey.shade400,
-          fontWeight: FontWeight.w500,
-          fontSize: 16.sp,
-        ),
+        hintStyle: GoogleFonts.poppins(color: Colors.grey.shade400, fontWeight: FontWeight.w500, fontSize: 16.sp),
         contentPadding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 1.5.h),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: _borderGrey),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: _primaryBlue, width: 1.5),
-        ),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _borderGrey)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: _primaryBlue, width: 1.5)),
       ),
     );
   }
 
   Widget _buildDifficultySelector() {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(10)),
       padding: const EdgeInsets.all(4),
       child: Row(
         children: _difficultyLevels.map((level) {
@@ -484,35 +379,8 @@ class _TeacherEditStemChallengeScreenState
               onTap: () => setState(() => _selectedDifficulty = level),
               child: Container(
                 padding: EdgeInsets.symmetric(vertical: 1.2.h),
-                decoration: BoxDecoration(
-                  color: isSelected ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          ),
-                        ]
-                      : [],
-                ),
-                child: Center(
-                  child: Text(
-                    level,
-                    style: GoogleFonts.poppins(
-                      fontSize: 15.sp,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected
-                          ? (level == 'Easy'
-                                ? Colors.green
-                                : (level == 'Medium'
-                                      ? Colors.orange
-                                      : Colors.red))
-                          : Colors.grey.shade600,
-                    ),
-                  ),
-                ),
+                decoration: BoxDecoration(color: isSelected ? Colors.white : Colors.transparent, borderRadius: BorderRadius.circular(8), boxShadow: isSelected ? [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, 2))] : []),
+                child: Center(child: Text(level, style: GoogleFonts.poppins(fontSize: 15.sp, fontWeight: FontWeight.w600, color: isSelected ? (level == 'Easy' ? Colors.green : (level == 'Medium' ? Colors.orange : Colors.red)) : Colors.grey.shade600))),
               ),
             ),
           );
@@ -523,81 +391,24 @@ class _TeacherEditStemChallengeScreenState
 
   Widget _buildImageUploadBox() {
     ImageProvider? imageProvider;
-    if (_newImageFile != null) {
-      imageProvider = FileImage(_newImageFile!);
-    } else if (_existingImageUrl != null && _existingImageUrl!.isNotEmpty) {
-      imageProvider = NetworkImage(_existingImageUrl!);
-    }
+    if (_newImageFile != null) imageProvider = FileImage(_newImageFile!);
+    else if (_existingImageUrl != null && _existingImageUrl!.isNotEmpty) imageProvider = NetworkImage(_existingImageUrl!);
 
     return CustomPaint(
-      painter: DashedRectPainter(
-        color: _dashedBorderColor,
-        strokeWidth: 1.5,
-        gap: 6,
-      ),
+      painter: DashedRectPainter(color: _dashedBorderColor, strokeWidth: 1.5, gap: 6, radius: 12),
       child: Container(
         height: 20.h,
         width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(12)),
         child: InkWell(
           onTap: () async {
             final ImagePicker picker = ImagePicker();
-            final XFile? image = await picker.pickImage(
-              source: ImageSource.gallery,
-            );
+            final XFile? image = await picker.pickImage(source: ImageSource.gallery);
             if (image != null) setState(() => _newImageFile = File(image.path));
           },
           child: imageProvider != null
-              ? Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image(
-                        image: imageProvider,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                      ),
-                    ),
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: InkWell(
-                        onTap: () => setState(() {
-                          _newImageFile = null;
-                          _existingImageUrl = null;
-                        }),
-                        child: CircleAvatar(
-                          backgroundColor: Colors.white,
-                          radius: 16,
-                          child: Icon(Icons.close, size: 20, color: Colors.red),
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.cloud_upload_rounded,
-                      size: 32.sp,
-                      color: Colors.grey.shade600,
-                    ),
-                    SizedBox(height: 1.h),
-                    Text(
-                      "Tap to change image",
-                      style: GoogleFonts.poppins(
-                        fontSize: 15.sp,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                  ],
-                ),
+              ? Stack(children: [ClipRRect(borderRadius: BorderRadius.circular(12), child: Image(image: imageProvider!, fit: BoxFit.cover, width: double.infinity, height: double.infinity)), Positioned(top: 8, right: 8, child: InkWell(onTap: () => setState(() { _newImageFile = null; _existingImageUrl = null; }), child: const CircleAvatar(backgroundColor: Colors.white, radius: 16, child: Icon(Icons.close, size: 20, color: Colors.red))))])
+              : Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.cloud_upload_rounded, size: 32.sp, color: Colors.grey.shade600), SizedBox(height: 1.h), Text("Tap to change image", style: GoogleFonts.poppins(fontSize: 15.sp, fontWeight: FontWeight.w600, color: Colors.grey.shade700))]),
         ),
       ),
     );
@@ -610,32 +421,8 @@ class _TeacherEditStemChallengeScreenState
       children: _materials.map((material) {
         return Container(
           padding: EdgeInsets.symmetric(horizontal: 3.w, vertical: 1.h),
-          decoration: BoxDecoration(
-            color: _lightBlue,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                material,
-                style: GoogleFonts.poppins(
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.w600,
-                  color: _primaryBlue,
-                ),
-              ),
-              SizedBox(width: 1.w),
-              InkWell(
-                onTap: () => setState(() => _materials.remove(material)),
-                child: Icon(
-                  Icons.close,
-                  size: 18.sp,
-                  color: _primaryBlue.withOpacity(0.7),
-                ),
-              ),
-            ],
-          ),
+          decoration: BoxDecoration(color: _lightBlue, borderRadius: BorderRadius.circular(20)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [Text(material, style: GoogleFonts.poppins(fontSize: 15.sp, fontWeight: FontWeight.w600, color: _primaryBlue)), SizedBox(width: 1.w), InkWell(onTap: () => setState(() => _materials.remove(material)), child: Icon(Icons.close, size: 18.sp, color: _primaryBlue.withOpacity(0.7)))]),
         );
       }).toList(),
     );
@@ -650,45 +437,14 @@ class _TeacherEditStemChallengeScreenState
       itemBuilder: (context, index) {
         return Container(
           padding: EdgeInsets.all(3.w),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _borderGrey),
-          ),
+          decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: _borderGrey)),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 15.sp,
-                backgroundColor: _primaryBlue,
-                child: Text(
-                  "${index + 1}",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15.sp,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+              CircleAvatar(radius: 15.sp, backgroundColor: _primaryBlue, child: Text("${index + 1}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
               SizedBox(width: 3.w),
-              Expanded(
-                child: Text(
-                  _steps[index],
-                  style: GoogleFonts.poppins(
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w500,
-                    color: _textDark,
-                  ),
-                ),
-              ),
-              InkWell(
-                onTap: () => setState(() => _steps.removeAt(index)),
-                child: Icon(
-                  Icons.delete_outline,
-                  size: 20.sp,
-                  color: Colors.redAccent,
-                ),
-              ),
+              Expanded(child: Text(_steps[index], style: GoogleFonts.poppins(fontSize: 16.sp, fontWeight: FontWeight.w500, color: _textDark))),
+              InkWell(onTap: () => setState(() => _steps.removeAt(index)), child: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent)),
             ],
           ),
         );
@@ -696,40 +452,13 @@ class _TeacherEditStemChallengeScreenState
     );
   }
 
-  Widget _buildDashedAddButton({
-    required String label,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildDashedAddButton({required String label, required VoidCallback onTap}) {
     return CustomPaint(
-      painter: DashedRectPainter(
-        color: _dashedBorderColor,
-        strokeWidth: 1.5,
-        gap: 5,
-        radius: 10,
-      ),
+      painter: DashedRectPainter(color: _dashedBorderColor, strokeWidth: 1.5, gap: 5, radius: 10),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
-        child: Container(
-          width: double.infinity,
-          padding: EdgeInsets.symmetric(vertical: 1.5.h),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_circle, color: _primaryBlue, size: 20.sp),
-              SizedBox(width: 2.w),
-              Text(
-                label,
-                style: GoogleFonts.poppins(
-                  fontSize: 16.sp,
-                  fontWeight: FontWeight.w600,
-                  color: _primaryBlue,
-                ),
-              ),
-            ],
-          ),
-        ),
+        child: Container(width: double.infinity, padding: EdgeInsets.symmetric(vertical: 1.5.h), alignment: Alignment.center, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_circle, color: _primaryBlue, size: 20.sp), SizedBox(width: 2.w), Text(label, style: GoogleFonts.poppins(fontSize: 16.sp, fontWeight: FontWeight.w600, color: _primaryBlue))])),
       ),
     );
   }
@@ -742,44 +471,12 @@ class _TeacherEditStemChallengeScreenState
           height: 7.5.h,
           child: ElevatedButton(
             onPressed: isLoading ? null : _updateChallenge,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _primaryBlue,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 5,
-            ),
-            child: isLoading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : Text(
-                    "Update Challenge",
-                    style: GoogleFonts.poppins(
-                      fontSize: 17.sp,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+            style: ElevatedButton.styleFrom(backgroundColor: _primaryBlue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 5),
+            child: isLoading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : Text("Update Challenge", style: GoogleFonts.poppins(fontSize: 17.sp, fontWeight: FontWeight.bold, color: Colors.white)),
           ),
         ),
         SizedBox(height: 2.h),
-        TextButton(
-          onPressed: isLoading ? null : () => Navigator.pop(context),
-          child: Text(
-            "Cancel",
-            style: GoogleFonts.poppins(
-              fontSize: 15.sp,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade600,
-            ),
-          ),
-        ),
+        TextButton(onPressed: isLoading ? null : () => Navigator.pop(context), child: Text("Cancel", style: GoogleFonts.poppins(fontSize: 15.sp, fontWeight: FontWeight.w600, color: Colors.grey.shade600))),
       ],
     );
   }
@@ -789,39 +486,11 @@ class _TeacherEditStemChallengeScreenState
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(
-          "Add Material",
-          style: GoogleFonts.poppins(
-            fontSize: 18.sp,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: TextField(
-          controller: _materialController,
-          style: TextStyle(fontSize: 16.sp),
-          decoration: InputDecoration(
-            hintText: "e.g. 2 AA Batteries",
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        ),
+        title: Text("Add Material", style: GoogleFonts.poppins(fontSize: 18.sp, fontWeight: FontWeight.bold)),
+        content: TextField(controller: _materialController, style: const TextStyle(fontSize: 16), decoration: const InputDecoration(hintText: "e.g. 2 AA Batteries")),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text("Cancel", style: TextStyle(fontSize: 15.sp)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (_materialController.text.isNotEmpty) {
-                setState(() => _materials.add(_materialController.text));
-                Navigator.pop(ctx);
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: _primaryBlue),
-            child: Text(
-              "Add",
-              style: TextStyle(fontSize: 15.sp, color: Colors.white),
-            ),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          ElevatedButton(onPressed: () { if (_materialController.text.isNotEmpty) { setState(() => _materials.add(_materialController.text)); Navigator.pop(ctx); } }, child: const Text("Add")),
         ],
       ),
     );
@@ -832,40 +501,11 @@ class _TeacherEditStemChallengeScreenState
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(
-          "Add Instruction Step",
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            fontSize: 18.sp,
-          ),
-        ),
-        content: TextField(
-          controller: stepCtrl,
-          maxLines: 3,
-          style: TextStyle(fontSize: 16.sp),
-          decoration: InputDecoration(
-            hintText: "Describe the step...",
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        ),
+        title: Text("Add Instruction Step", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18.sp)),
+        content: TextField(controller: stepCtrl, maxLines: 3, style: const TextStyle(fontSize: 16), decoration: const InputDecoration(hintText: "Describe the step...")),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text("Cancel", style: TextStyle(fontSize: 15.sp)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (stepCtrl.text.isNotEmpty) {
-                setState(() => _steps.add(stepCtrl.text));
-                Navigator.pop(ctx);
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: _primaryBlue),
-            child: Text(
-              "Add",
-              style: TextStyle(color: Colors.white, fontSize: 15.sp),
-            ),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+          ElevatedButton(onPressed: () { if (stepCtrl.text.isNotEmpty) { setState(() => _steps.add(stepCtrl.text)); Navigator.pop(ctx); } }, child: const Text("Add")),
         ],
       ),
     );
@@ -877,38 +517,20 @@ class DashedRectPainter extends CustomPainter {
   final Color color;
   final double gap;
   final double radius;
-  DashedRectPainter({
-    this.strokeWidth = 1.0,
-    this.color = Colors.red,
-    this.gap = 5.0,
-    this.radius = 0,
-  });
+  DashedRectPainter({this.strokeWidth = 1.0, this.color = Colors.red, this.gap = 5.0, this.radius = 0});
   @override
   void paint(Canvas canvas, Size size) {
-    Paint dashedPaint = Paint()
-      ..color = color
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke;
-    Path path = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(0, 0, size.width, size.height),
-          Radius.circular(radius),
-        ),
-      );
+    Paint dashedPaint = Paint()..color = color..strokeWidth = strokeWidth..style = PaintingStyle.stroke;
+    Path path = Path()..addRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, size.width, size.height), Radius.circular(radius)));
     PathMetrics pathMetrics = path.computeMetrics();
     for (PathMetric pathMetric in pathMetrics) {
       double distance = 0.0;
       while (distance < pathMetric.length) {
-        canvas.drawPath(
-          pathMetric.extractPath(distance, distance + 5),
-          dashedPaint,
-        );
+        canvas.drawPath(pathMetric.extractPath(distance, distance + 5), dashedPaint);
         distance += 5 + gap;
       }
     }
   }
-
   @override
   bool shouldRepaint(CustomPainter oldDelegate) => false;
 }

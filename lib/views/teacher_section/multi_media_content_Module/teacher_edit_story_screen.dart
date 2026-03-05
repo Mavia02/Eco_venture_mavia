@@ -1,16 +1,18 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui'; // Required for PathMetrics
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
+
+// Import Backend Model
 import '../../../../models/story_model.dart';
 import '../../../core/config/api_constants.dart';
 import '../../../services/shared_preferences_helper.dart';
 import '../../../viewmodels/multimedia_content/teacher_multimedia_provider.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 
 class TeacherEditStoryScreen extends ConsumerStatefulWidget {
   final StoryModel storyData;
@@ -37,7 +39,12 @@ class _TeacherEditStoryScreenState
   File? _coverImage; // New local file
   String? _existingCoverUrl; // Old network URL
   late List<StoryPage> _pages;
-  bool _isSensitive = false; // NEW
+  bool _isSensitive = false;
+
+  // --- NEW: Age Selection State ---
+  String? _selectedYear;
+  final List<String> _individualYears = ["6", "7", "8", "9", "10", "11", "12"];
+
   final List<String> _storyCategories = [
     "Adventure",
     "Animals",
@@ -58,27 +65,46 @@ class _TeacherEditStoryScreenState
     _titleController.text = widget.storyData.title;
     _descController.text = widget.storyData.description;
     _existingCoverUrl = widget.storyData.thumbnailUrl;
-
-    // FIX HERE
     _pages = List.from(widget.storyData.pages);
-
     _tagsController.text = widget.storyData.tags.join(', ');
-    _isSensitive = widget.storyData.tags.contains('scary');
+    _isSensitive = widget.storyData.isSensitive;
     _selectedCategory = widget.storyData.category;
+
+    // --- NEW: Initialize selected year based on existing ageGroup range ---
+    if (widget.storyData.ageGroup == "6 - 8") {
+      _selectedYear = "6";
+    } else if (widget.storyData.ageGroup == "8 - 10") {
+      _selectedYear = "9";
+    } else if (widget.storyData.ageGroup == "10 - 12") {
+      _selectedYear = "11";
+    } else {
+      _selectedYear = "6"; // Default fallback
+    }
   }
 
   @override
   void dispose() {
     _titleController.dispose();
     _descController.dispose();
+    _tagsController.dispose();
     super.dispose();
+  }
+
+  // Logic: Map individual year selection to broad backend range strings
+  String _mapYearToClass(String year) {
+    int age = int.parse(year);
+    if (age >= 6 && age <= 8) return "6 - 8";
+    if (age >= 9 && age <= 10) return "8 - 10";
+    if (age >= 11 && age <= 12) return "10 - 12";
+    return "6 - 8";
   }
 
   // --- NOTIFICATION LOGIC ---
   Future<void> _sendClassNotification(
-    String teacherId,
-    String storyTitle,
-  ) async {
+      String teacherId,
+      String storyTitle,
+      String ageGroup,
+      ) async {
     const String backendUrl = ApiConstants.notifyChildClassEndPoints;
 
     try {
@@ -89,14 +115,13 @@ class _TeacherEditStoryScreenState
           "teacherId": teacherId,
           "type": "Story",
           "title": "Story Updated: $storyTitle 📖",
-          "body": "Your teacher updated the story: $storyTitle. Check it out!",
+          "body": "The story for Group $ageGroup has been updated. Check it out!",
+          "ageGroup": ageGroup,
         }),
       );
 
       if (response.statusCode == 200) {
         print("✅ Story Update Notification sent successfully");
-      } else {
-        print("❌ Notification failed: ${response.body}");
       }
     } catch (e) {
       print("❌ Error calling notification backend: $e");
@@ -104,16 +129,16 @@ class _TeacherEditStoryScreenState
   }
 
   Future<void> _updateStory() async {
-    if (_titleController.text.isEmpty) {
+    if (_titleController.text.isEmpty || _selectedYear == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Title is required"),
+          content: Text("Title and Target Age are required"),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
-    // Get teacher ID for notification
+
     String? teacherId = await SharedPreferencesHelper.instance.getUserId();
     if (teacherId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -124,6 +149,9 @@ class _TeacherEditStoryScreenState
       );
       return;
     }
+
+    // Process Mapping
+    String mappedAgeGroup = _mapYearToClass(_selectedYear!);
 
     // Process Tags
     List<String> tagsList = _tagsController.text
@@ -139,17 +167,18 @@ class _TeacherEditStoryScreenState
       description: _descController.text.trim(),
       thumbnailUrl: _coverImage?.path ?? _existingCoverUrl,
       pages: _pages,
-      tags: tagsList, // Save tags
+      tags: tagsList,
       isSensitive: _isSensitive,
       category: _selectedCategory,
+      ageGroup: mappedAgeGroup, // Pass updated classification
     );
 
     await ref
         .read(teacherMultimediaViewModelProvider.notifier)
         .updateStory(updatedStory);
-    // Send notification only if not sensitive
+
     if (!_isSensitive) {
-      await _sendClassNotification(teacherId, updatedStory.title);
+      await _sendClassNotification(teacherId, updatedStory.title, mappedAgeGroup);
     }
   }
 
@@ -159,7 +188,7 @@ class _TeacherEditStoryScreenState
     if (img != null) {
       setState(() {
         _coverImage = File(img.path);
-        _existingCoverUrl = null; // Clear existing if new picked
+        _existingCoverUrl = null;
       });
     }
   }
@@ -242,6 +271,12 @@ class _TeacherEditStoryScreenState
                         hint: "e.g. The Brave Little Rabbit",
                       ),
                       SizedBox(height: 2.h),
+
+                      // --- NEW: Target Age Dropdown ---
+                      _buildLabel("Target Age (Years)"),
+                      _buildAgeDropdown(),
+                      SizedBox(height: 2.h),
+
                       _buildLabel("Description"),
                       _buildTextField(
                         controller: _descController,
@@ -278,15 +313,12 @@ class _TeacherEditStoryScreenState
                           ),
                         ),
                       ),
-                      SizedBox(height: 2.h),
-
                       SizedBox(height: 3.h),
                       _buildLabel("Cover Illustration"),
                       _buildCoverUpload(),
                     ],
                   ),
                 ),
-                SizedBox(height: 4.h),
                 SizedBox(height: 3.h),
                 Container(
                   padding: EdgeInsets.all(4.w),
@@ -306,29 +338,34 @@ class _TeacherEditStoryScreenState
                           color: _textDark,
                         ),
                       ),
-                      SizedBox(height: 2.h),
-                      TextField(
+                      SizedBox(height: 1.h),
+                      _buildLabel("Tags (comma separated)"),
+                      _buildTextField(
                         controller: _tagsController,
-                        decoration: InputDecoration(
-                          hintText: "Tags",
-                          filled: true,
-                          fillColor: Colors.grey.shade50,
-                        ),
+                        hint: "e.g. animals, space, fun",
                       ),
+                      SizedBox(height: 1.h),
                       SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
                         title: Text(
                           "Contains Sensitive Content?",
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w600,
+                            fontSize: 15.sp,
                           ),
+                        ),
+                        subtitle: Text(
+                          "Marks as 'Scary' for parent filters.",
+                          style: GoogleFonts.poppins(fontSize: 12.sp, color: Colors.grey),
                         ),
                         value: _isSensitive,
                         onChanged: (val) => setState(() => _isSensitive = val),
+                        activeColor: Colors.redAccent,
                       ),
                     ],
                   ),
                 ),
-                SizedBox(height: 1.h),
+                SizedBox(height: 3.h),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -404,13 +441,13 @@ class _TeacherEditStoryScreenState
                     child: state.isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : Text(
-                            "Update Story",
-                            style: GoogleFonts.poppins(
-                              fontSize: 16.sp,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
+                      "Update Story",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
                 SizedBox(height: 5.h),
@@ -429,7 +466,37 @@ class _TeacherEditStoryScreenState
     );
   }
 
-  // ... (Reused Widgets from Add Screen: _buildSectionHeader, _buildLabel, _buildTextField) ...
+  Widget _buildAgeDropdown() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 3.w),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _borderGrey),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedYear,
+          isExpanded: true,
+          items: _individualYears.map((y) {
+            return DropdownMenuItem(
+              value: y,
+              child: Text(
+                "$y Years Old",
+                style: GoogleFonts.poppins(fontSize: 15.sp),
+              ),
+            );
+          }).toList(),
+          onChanged: (value) {
+            if (value != null) {
+              setState(() => _selectedYear = value);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildSectionHeader(String title) => Text(
     title,
     style: GoogleFonts.poppins(
@@ -438,6 +505,7 @@ class _TeacherEditStoryScreenState
       color: _textDark,
     ),
   );
+
   Widget _buildLabel(String text) => Padding(
     padding: EdgeInsets.only(bottom: 1.h),
     child: Text(
@@ -502,33 +570,33 @@ class _TeacherEditStoryScreenState
           width: double.infinity,
           decoration: imgProvider == null
               ? BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                )
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+          )
               : null,
           child: imgProvider != null
               ? ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image(
-                    image: imgProvider,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                  ),
-                )
+            borderRadius: BorderRadius.circular(12),
+            child: Image(
+              image: imgProvider,
+              fit: BoxFit.cover,
+              width: double.infinity,
+            ),
+          )
               : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.image_rounded, size: 32.sp, color: Colors.grey),
-                    SizedBox(height: 1.h),
-                    Text(
-                      "Upload Cover Art",
-                      style: GoogleFonts.poppins(
-                        fontSize: 14.sp,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ],
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.image_rounded, size: 32.sp, color: Colors.grey),
+              SizedBox(height: 1.h),
+              Text(
+                "Upload Cover Art",
+                style: GoogleFonts.poppins(
+                  fontSize: 14.sp,
+                  color: Colors.grey,
                 ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -538,7 +606,6 @@ class _TeacherEditStoryScreenState
     final page = _pages[index];
 
     ImageProvider? pageImgProvider;
-    // Smart check: Is it a URL (http) or Local Path?
     if (page.imageUrl.isNotEmpty) {
       if (page.imageUrl.startsWith('http')) {
         pageImgProvider = NetworkImage(page.imageUrl);
@@ -614,7 +681,6 @@ class _TeacherEditStoryScreenState
     );
   }
 
-  // --- PAGE EDITOR MODAL ---
   void _showPageEditor({int? existingIndex}) {
     final textCtrl = TextEditingController(
       text: existingIndex != null ? _pages[existingIndex].text : "",
@@ -623,7 +689,6 @@ class _TeacherEditStoryScreenState
     File? pageImageFile;
     String? pageImageUrl;
 
-    // Initialize image state from existing data
     if (existingIndex != null && _pages[existingIndex].imageUrl.isNotEmpty) {
       if (_pages[existingIndex].imageUrl.startsWith('http')) {
         pageImageUrl = _pages[existingIndex].imageUrl;
@@ -711,7 +776,7 @@ class _TeacherEditStoryScreenState
                             if (img != null) {
                               setModalState(() {
                                 pageImageFile = File(img.path);
-                                pageImageUrl = null; // Override existing URL
+                                pageImageUrl = null;
                               });
                             }
                           },
@@ -724,31 +789,31 @@ class _TeacherEditStoryScreenState
                               border: Border.all(color: Colors.grey.shade300),
                               image: editorImgProvider != null
                                   ? DecorationImage(
-                                      image: editorImgProvider,
-                                      fit: BoxFit.cover,
-                                    )
+                                image: editorImgProvider,
+                                fit: BoxFit.cover,
+                              )
                                   : null,
                             ),
                             child: editorImgProvider == null
                                 ? Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.add_photo_alternate,
-                                          color: _primaryPurple,
-                                          size: 24.sp,
-                                        ),
-                                        Text(
-                                          "Add Image",
-                                          style: TextStyle(
-                                            color: _primaryPurple,
-                                          ),
-                                        ),
-                                      ],
+                              child: Column(
+                                mainAxisAlignment:
+                                MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_photo_alternate,
+                                    color: _primaryPurple,
+                                    size: 24.sp,
+                                  ),
+                                  Text(
+                                    "Add Image",
+                                    style: TextStyle(
+                                      color: _primaryPurple,
                                     ),
-                                  )
+                                  ),
+                                ],
+                              ),
+                            )
                                 : null,
                           ),
                         ),
@@ -762,7 +827,7 @@ class _TeacherEditStoryScreenState
                                   pageImageFile = null;
                                   pageImageUrl = null;
                                 }),
-                                child: Text(
+                                child: const Text(
                                   "Remove Image",
                                   style: TextStyle(color: Colors.red),
                                 ),
@@ -785,7 +850,6 @@ class _TeacherEditStoryScreenState
                           pageImageUrl == null)
                         return;
 
-                      // If we have a local file, save its path. If we have a URL, keep it.
                       final String newPath =
                           pageImageFile?.path ?? pageImageUrl ?? "";
 
@@ -827,7 +891,6 @@ class _TeacherEditStoryScreenState
   }
 }
 
-// --- CUSTOM PAINTER ---
 class DashedRectPainter extends CustomPainter {
   final double strokeWidth;
   final Color color;

@@ -33,7 +33,11 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
   final TextEditingController _descController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
   final TextEditingController _categoryController =
-      TextEditingController(); // NEW: Category controller
+  TextEditingController(); // NEW: Category controller
+
+  // --- NEW: Age Selection State ---
+  String? _selectedYear;
+  final List<String> _individualYears = ["6", "7", "8", "9", "10", "11", "12"];
 
   File? _coverImage;
   bool _isSensitive = false;
@@ -60,16 +64,29 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
     _titleController.dispose();
     _descController.dispose();
     _tagsController.dispose();
-    _categoryController.dispose(); // Dispose category controller
+    _categoryController.dispose();
     super.dispose();
+  }
+
+  // Logic: Map the individual year selection to the broad backend classes
+  String _mapYearToClass(String year) {
+    int age = int.parse(year);
+    if (age >= 6 && age <= 8) {
+      return "6 - 8";
+    } else if (age >= 9 && age <= 10) {
+      return "8 - 10";
+    } else if (age >= 11 && age <= 12) {
+      return "10 - 12";
+    }
+    return "6 - 8"; // Default fallback
   }
 
   // --- SAVE LOGIC ---
   Future<void> _saveStory() async {
-    if (_titleController.text.trim().isEmpty) {
+    if (_titleController.text.trim().isEmpty || _selectedYear == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please enter a story title"),
+          content: Text("Please enter a story title and select target age"),
           backgroundColor: Colors.red,
         ),
       );
@@ -97,6 +114,9 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
       return;
     }
 
+    // Process Mapping
+    String mappedAgeGroup = _mapYearToClass(_selectedYear!);
+
     // Process Tags
     List<String> tagsList = _tagsController.text
         .split(',')
@@ -118,21 +138,25 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
       views: 0,
       tags: tagsList,
       isSensitive: _isSensitive,
-      category: _selectedCategory, // NEW: Add category
+      category: _selectedCategory,
+      ageGroup: mappedAgeGroup, // Pass mapped classification to model
     );
 
     await ref
         .read(teacherMultimediaViewModelProvider.notifier)
         .addStory(newStory);
+
     // Send notification only if not sensitive
     if (!_isSensitive) {
-      await _sendClassNotification(teacherId, newStory.title);
+      await _sendClassNotification(teacherId, newStory.title, mappedAgeGroup);
     }
   }
-// --- NOTIFICATION LOGIC ---
+
+  // --- NOTIFICATION LOGIC ---
   Future<void> _sendClassNotification(
       String teacherId,
       String storyTitle,
+      String ageGroup,
       ) async {
     const String backendUrl = ApiConstants.notifyChildClassEndPoints;
 
@@ -144,7 +168,8 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
           "teacherId": teacherId,
           "type": "Story",
           "title": "New Story: $storyTitle 📖",
-          "body": "Your teacher added a new story: $storyTitle. Read it now!",
+          "body": "A new story for Group $ageGroup is ready! Read it now!",
+          "ageGroup": ageGroup, // Logic: Send age group to backend for targeting
         }),
       );
 
@@ -157,6 +182,7 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
       print("❌ Error calling notification backend: $e");
     }
   }
+
   Future<void> _pickCoverImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? img = await picker.pickImage(source: ImageSource.gallery);
@@ -243,6 +269,12 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
                         hint: "e.g. The Brave Little Rabbit",
                       ),
                       SizedBox(height: 2.h),
+
+                      // --- NEW: Target Age Dropdown ---
+                      _buildLabel("Target Age (Years)"),
+                      _buildAgeDropdown(),
+                      SizedBox(height: 2.h),
+
                       _buildLabel("Story Category"),
                       Container(
                         padding: EdgeInsets.symmetric(horizontal: 4.w),
@@ -270,7 +302,7 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
                             });
                           },
                           items: _storyCategories.map<DropdownMenuItem<String>>(
-                            (String value) {
+                                (String value) {
                               return DropdownMenuItem<String>(
                                 value: value,
                                 child: Text(
@@ -297,7 +329,7 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
                 ),
                 SizedBox(height: 4.h),
 
-                // --- SECTION 2: CONTENT SAFETY (NEW) ---
+                // --- SECTION 2: CONTENT SAFETY ---
                 _buildSectionHeader("Content Safety"),
                 SizedBox(height: 1.5.h),
                 Container(
@@ -419,13 +451,13 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
                     child: state.isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : Text(
-                            "Publish Story",
-                            style: GoogleFonts.poppins(
-                              fontSize: 16.sp,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
+                      "Publish Story",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
                 SizedBox(height: 5.h),
@@ -445,6 +477,34 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
   }
 
   // --- WIDGETS ---
+
+  Widget _buildAgeDropdown() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 4.w),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _borderGrey),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedYear,
+          isExpanded: true,
+          hint: Text("Select Age", style: GoogleFonts.poppins(fontSize: 15.sp, color: Colors.grey)),
+          icon: Icon(Icons.keyboard_arrow_down, color: _primaryPurple),
+          items: _individualYears
+              .map(
+                (y) => DropdownMenuItem(
+              value: y,
+              child: Text("$y Years Old", style: GoogleFonts.poppins(fontSize: 15.sp)),
+            ),
+          )
+              .toList(),
+          onChanged: (v) => setState(() => _selectedYear = v!),
+        ),
+      ),
+    );
+  }
 
   Widget _buildSectionHeader(String title) => Text(
     title,
@@ -511,33 +571,33 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
           width: double.infinity,
           decoration: _coverImage == null
               ? BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                )
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+          )
               : null,
           child: _coverImage != null
               ? ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.file(
-                    _coverImage!,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                  ),
-                )
+            borderRadius: BorderRadius.circular(12),
+            child: Image.file(
+              _coverImage!,
+              fit: BoxFit.cover,
+              width: double.infinity,
+            ),
+          )
               : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.image_rounded, size: 32.sp, color: Colors.grey),
-                    SizedBox(height: 1.h),
-                    Text(
-                      "Upload Cover Art",
-                      style: GoogleFonts.poppins(
-                        fontSize: 14.sp,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ],
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.image_rounded, size: 32.sp, color: Colors.grey),
+              SizedBox(height: 1.h),
+              Text(
+                "Upload Cover Art",
+                style: GoogleFonts.poppins(
+                  fontSize: 14.sp,
+                  color: Colors.grey,
                 ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -618,9 +678,6 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
   }
 
   void _showPageEditor({int? existingIndex}) {
-    // ... (Keep existing _showPageEditor implementation)
-    // I will assume this part was working fine, re-use from previous snippet to save space
-    // It's the same Modal logic
     final textCtrl = TextEditingController(
       text: existingIndex != null ? _pages[existingIndex].text : "",
     );
@@ -715,31 +772,31 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
                               border: Border.all(color: Colors.grey.shade300),
                               image: editorImgProvider != null
                                   ? DecorationImage(
-                                      image: editorImgProvider,
-                                      fit: BoxFit.cover,
-                                    )
+                                image: editorImgProvider,
+                                fit: BoxFit.cover,
+                              )
                                   : null,
                             ),
                             child: editorImgProvider == null
                                 ? Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.add_photo_alternate,
-                                          color: _primaryPurple,
-                                          size: 24.sp,
-                                        ),
-                                        Text(
-                                          "Add Image",
-                                          style: TextStyle(
-                                            color: _primaryPurple,
-                                          ),
-                                        ),
-                                      ],
+                              child: Column(
+                                mainAxisAlignment:
+                                MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_photo_alternate,
+                                    color: _primaryPurple,
+                                    size: 24.sp,
+                                  ),
+                                  Text(
+                                    "Add Image",
+                                    style: TextStyle(
+                                      color: _primaryPurple,
                                     ),
-                                  )
+                                  ),
+                                ],
+                              ),
+                            )
                                 : null,
                           ),
                         ),
@@ -751,7 +808,7 @@ class _TeacherAddStoryScreenState extends ConsumerState<TeacherAddStoryScreen> {
                               child: TextButton(
                                 onPressed: () =>
                                     setModalState(() => pageImage = null),
-                                child: Text(
+                                child: const Text(
                                   "Remove Image",
                                   style: TextStyle(color: Colors.red),
                                 ),

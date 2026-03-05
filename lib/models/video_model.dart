@@ -16,6 +16,7 @@ class VideoModel {
   final Map<String, bool> userLikes;
   final bool isSensitive;
   final List<String> tags;
+  final String ageGroup; // NEW: Added for classification logic
 
   VideoModel({
     required this.id,
@@ -34,7 +35,8 @@ class VideoModel {
     this.status = 'published',
     this.createdBy = 'admin',
     Map<String, bool>? userLikes,
-    this.tags = const [], // Default empty
+    this.tags = const [],
+    required this.ageGroup, // Now required in constructor
   }) : userLikes = userLikes ?? {};
 
   factory VideoModel.fromMap(Map<String, dynamic> map) {
@@ -58,6 +60,7 @@ class VideoModel {
       createdBy: map['created_by'] ?? 'admin',
       userLikes: Map<String, bool>.from(map['userLikes'] ?? {}),
       tags: List<String>.from(map['tags'] ?? []),
+      ageGroup: map['ageGroup'] ?? '6 - 8', // Load classification
     );
   }
 
@@ -78,20 +81,31 @@ class VideoModel {
       'status': status,
       'created_by': createdBy,
       'userLikes': userLikes,
-      'tags': tags, // Save tags
+      'tags': tags,
       'isSensitive': isSensitive,
+      'ageGroup': ageGroup, // Save classification
     };
   }
 
-  // copyWith needs update too...
   VideoModel copyWith({
-    String? id, String? adminId, String? title, String? description,
-    String? category, String? videoUrl, String? thumbnailUrl,
-    String? duration, DateTime? uploadedAt, int? likes, int? dislikes,
-    int? views, String? status, String? createdBy,
+    String? id,
+    String? adminId,
+    String? title,
+    String? description,
+    String? category,
+    String? videoUrl,
+    String? thumbnailUrl,
+    String? duration,
+    DateTime? uploadedAt,
+    int? likes,
+    int? dislikes,
+    int? views,
+    String? status,
+    String? createdBy,
     Map<String, bool>? userLikes,
     List<String>? tags,
     bool? isSensitive,
+    String? ageGroup,
   }) {
     return VideoModel(
       id: id ?? this.id,
@@ -111,6 +125,7 @@ class VideoModel {
       userLikes: userLikes ?? this.userLikes,
       tags: tags ?? this.tags,
       isSensitive: isSensitive ?? this.isSensitive,
+      ageGroup: ageGroup ?? this.ageGroup,
     );
   }
 }

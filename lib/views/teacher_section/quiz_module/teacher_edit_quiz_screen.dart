@@ -1,20 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:eco_venture/core/config/api_constants.dart';
-import 'package:http/http.dart' as http; // Add HTTP import
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
 
-// Import models, providers, and helper
 import '../../../../models/quiz_topic_model.dart';
 import '../../../../services/shared_preferences_helper.dart';
 import '../../../viewmodels/teacher_quiz/teacher_quiz_provider.dart';
 
 class TeacherEditQuizScreen extends ConsumerStatefulWidget {
-  // Accepts dynamic to safely handle routing arguments
   final dynamic quizData;
 
   const TeacherEditQuizScreen({super.key, required this.quizData});
@@ -25,7 +23,7 @@ class TeacherEditQuizScreen extends ConsumerStatefulWidget {
 
 class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
   // --- PRO COLORS ---
-  final Color _primary = const Color(0xFF1565C0); // Teacher Blue
+  final Color _primary = const Color(0xFF1565C0);
   final Color _bg = const Color(0xFFF4F7FE);
   final Color _surface = Colors.white;
   final Color _textDark = const Color(0xFF1B2559);
@@ -34,8 +32,6 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
 
   // --- CONTROLLERS ---
   late TextEditingController _topicNameController;
-
-  // --- ADDED: Tags Controller ---
   late TextEditingController _tagsController;
 
   // --- STATE ---
@@ -43,64 +39,77 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
   late String _selectedCategory;
   final List<String> _categories = ['Science', 'Maths', 'Animals', 'Ecosystem'];
   late List<QuizLevelModel> _levels;
-
-  // --- ADDED: Sensitivity Flag ---
   late bool _isSensitive;
+
+  // --- NEW: Age Selection State ---
+  String? _selectedYear;
+  final List<String> _individualYears = ["6", "7", "8", "9", "10", "11", "12"];
 
   @override
   void initState() {
     super.initState();
 
-    // 1. Parse Data safely
     if (widget.quizData is QuizTopicModel) {
       _topic = widget.quizData as QuizTopicModel;
     } else {
-      // Fallback for Map data
       final map = Map<String, dynamic>.from(widget.quizData as Map);
       _topic = QuizTopicModel.fromMap(map['id'] ?? '', map['category'] ?? 'Science', map);
     }
 
-    // 2. Initialize State
     _topicNameController = TextEditingController(text: _topic.topicName);
-
-    // --- ADDED: Initialize tags controller ---
     _tagsController = TextEditingController(text: _topic.tags.join(', '));
-
     _selectedCategory = _categories.contains(_topic.category) ? _topic.category : _categories.first;
-
-    // Deep copy levels so we don't mutate original until save
     _levels = List<QuizLevelModel>.from(_topic.levels);
-
-    // --- ADDED: Initialize sensitivity ---
     _isSensitive = _topic.isSensitive;
+
+    // --- NEW: Initialize selected year from existing range string ---
+    if (_topic.ageGroup == "6 - 8") {
+      _selectedYear = "6";
+    } else if (_topic.ageGroup == "8 - 10") {
+      _selectedYear = "9";
+    } else if (_topic.ageGroup == "10 - 12") {
+      _selectedYear = "11";
+    } else {
+      _selectedYear = "6";
+    }
   }
 
   @override
   void dispose() {
     _topicNameController.dispose();
-    _tagsController.dispose(); // ADDED: Dispose tags controller
+    _tagsController.dispose();
     super.dispose();
   }
 
+  // Logic: Map the individual year selection to the broad backend classes
+  String _mapYearToClass(String year) {
+    int age = int.parse(year);
+    if (age >= 6 && age <= 8) {
+      return "6 - 8";
+    } else if (age >= 9 && age <= 10) {
+      return "8 - 10";
+    } else if (age >= 11 && age <= 12) {
+      return "10 - 12";
+    }
+    return "6 - 8";
+  }
+
   // --- NOTIFICATION LOGIC ---
-  Future<void> _sendClassNotification(String teacherId, String topicName) async {
+  Future<void> _sendClassNotification(String teacherId, String topicName, String ageGroup) async {
     const String backendUrl = ApiConstants.notifyChildClassEndPoints;
 
     try {
-      final response = await http.post(
+      await http.post(
         Uri.parse(backendUrl),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "teacherId": teacherId,
           "type": "Quiz",
           "title": "Quiz Updated: $topicName 📝",
-          "body": "Your teacher updated the '$topicName' quiz. Check it out!"
+          "body": "The quiz '$topicName' for Group $ageGroup has been updated!",
+          "ageGroup": ageGroup,
         }),
       );
-
-      if (response.statusCode == 200) {
-        print("✅ Class Notification sent successfully");
-      }
     } catch (e) {
       print("❌ Error calling backend: $e");
     }
@@ -108,8 +117,8 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
 
   // --- UPDATE LOGIC ---
   Future<void> _updateTopic() async {
-    if (_topicNameController.text.trim().isEmpty) {
-      _showError("Please enter a Topic Name");
+    if (_topicNameController.text.trim().isEmpty || _selectedYear == null) {
+      _showError("Please enter a Topic Name and select Target Age");
       return;
     }
     if (_levels.isEmpty) {
@@ -119,14 +128,15 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
 
     String? teacherId = await SharedPreferencesHelper.instance.getUserId();
 
-    // --- ADDED: Process tags like in Add Screen ---
+    // Mapping year to category
+    String mappedAgeGroup = _mapYearToClass(_selectedYear!);
+
     List<String> tagsList = _tagsController.text
         .split(',')
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList();
 
-    // --- ADDED: Sensitivity control logic ---
     if (_isSensitive && !tagsList.contains('scary')) {
       tagsList.add('scary');
     }
@@ -134,21 +144,19 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
       tagsList.remove('scary');
     }
 
-    // Create Updated Model (Preserve ID and Creator)
     final updatedTopic = _topic.copyWith(
       category: _selectedCategory,
       topicName: _topicNameController.text.trim(),
       levels: _levels,
-      // --- ADDED: Include tags and sensitivity ---
       tags: tagsList,
       isSensitive: _isSensitive,
+      ageGroup: mappedAgeGroup, // Pass updated age group
     );
 
     await ref.read(teacherQuizViewModelProvider.notifier).updateQuiz(updatedTopic);
 
-    // Trigger Notification if valid teacher and not sensitive
     if (!_isSensitive && teacherId != null) {
-      _sendClassNotification(teacherId, updatedTopic.topicName);
+      _sendClassNotification(teacherId, updatedTopic.topicName, mappedAgeGroup);
     }
   }
 
@@ -190,7 +198,7 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
           style: GoogleFonts.poppins(color: _textDark, fontWeight: FontWeight.w700, fontSize: 18.sp),
         ),
         bottom: PreferredSize(
-          preferredSize: Size.fromHeight(1),
+          preferredSize: const Size.fromHeight(1),
           child: Container(color: _border, height: 1),
         ),
       ),
@@ -201,7 +209,6 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // --- SECTION 1: GENERAL INFO ---
                 Text("General Info", style: GoogleFonts.poppins(fontSize: 16.sp, fontWeight: FontWeight.w700, color: _textGrey)),
                 SizedBox(height: 1.5.h),
 
@@ -244,13 +251,17 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
                       SizedBox(height: 1.h),
                       _buildProTextField(controller: _topicNameController, hint: "e.g. Solar System", icon: Icons.title_rounded),
 
-                      // --- ADDED: Tags Field ---
+                      // --- NEW: Target Age Dropdown ---
+                      SizedBox(height: 3.h),
+                      _buildProLabel("Target Age (Years)"),
+                      SizedBox(height: 1.h),
+                      _buildAgeDropdown(),
+
                       SizedBox(height: 3.h),
                       _buildProLabel("Tags (comma-separated)"),
                       SizedBox(height: 1.h),
-                      _buildProTextField(controller: _tagsController, hint: "e.g. history, war, politics, geography", icon: Icons.tag),
+                      _buildProTextField(controller: _tagsController, hint: "e.g. history, fun", icon: Icons.tag),
 
-                      // --- ADDED: Sensitivity Switch ---
                       SizedBox(height: 3.h),
                       Container(
                         decoration: BoxDecoration(
@@ -281,7 +292,6 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
 
                 SizedBox(height: 4.h),
 
-                // --- SECTION 2: LEVELS ---
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -321,7 +331,6 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
 
                 SizedBox(height: 5.h),
 
-                // --- UPDATE BUTTON ---
                 SizedBox(
                   width: double.infinity,
                   height: 7.h,
@@ -349,6 +358,29 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
   }
 
   // --- PRO WIDGETS ---
+
+  Widget _buildAgeDropdown() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 4.w),
+      decoration: BoxDecoration(
+        color: _bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedYear,
+          isExpanded: true,
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: _textDark, size: 24.sp),
+          items: _individualYears.map((y) => DropdownMenuItem(
+              value: y,
+              child: Text("$y Years Old", style: GoogleFonts.poppins(fontSize: 15.sp, color: _textDark, fontWeight: FontWeight.w600))
+          )).toList(),
+          onChanged: (val) => setState(() => _selectedYear = val!),
+        ),
+      ),
+    );
+  }
 
   Widget _buildProLabel(String text) {
     return Text(text, style: GoogleFonts.poppins(fontSize: 14.sp, fontWeight: FontWeight.w700, color: _textGrey));
@@ -433,9 +465,6 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
     );
   }
 
-  // ==========================================
-  // LEVEL EDITOR MODAL (Reused logic)
-  // ==========================================
   void _showLevelEditor({QuizLevelModel? existingLevel, int? index}) {
     final titleCtrl = TextEditingController(text: existingLevel?.title ?? "");
     final orderCtrl = TextEditingController(text: existingLevel?.order.toString() ?? "${_levels.length + 1}");
@@ -586,7 +615,6 @@ class _TeacherEditQuizScreenState extends ConsumerState<TeacherEditQuizScreen> {
     );
   }
 
-  // --- QUESTION EDITOR (FULL) ---
   void _showQuestionEditor(BuildContext ctx, Function(QuestionModel) onSave, {QuestionModel? existingQuestion}) {
     final qTextController = TextEditingController(text: existingQuestion?.question ?? "");
     final op1 = TextEditingController(text: existingQuestion?.options.isNotEmpty == true ? existingQuestion!.options[0] : "");

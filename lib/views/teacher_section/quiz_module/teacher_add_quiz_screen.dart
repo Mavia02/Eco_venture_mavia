@@ -34,6 +34,10 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
   String _selectedCategory = 'Science';
   final List<String> _categories = ['Science', 'Maths', 'Animals', 'Ecosystem'];
 
+  // --- NEW: Age Selection State ---
+  String? _selectedYear;
+  final List<String> _individualYears = ["6", "7", "8", "9", "10", "11", "12"];
+
   final List<QuizLevelModel> _levels = [];
   bool _isSensitive = false;
 
@@ -44,12 +48,25 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
     super.dispose();
   }
 
-  // --- NOTIFICATION LOGIC (NEW) ---
+  // Logic: Map the individual year selection to the broad backend classes
+  String _mapYearToClass(String year) {
+    int age = int.parse(year);
+    if (age >= 6 && age <= 8) {
+      return "6 - 8";
+    } else if (age >= 9 && age <= 10) {
+      return "8 - 10";
+    } else if (age >= 11 && age <= 12) {
+      return "10 - 12";
+    }
+    return "6 - 8"; // Default fallback
+  }
+
+  // --- NOTIFICATION LOGIC ---
   Future<void> _sendClassNotification(
-    String teacherId,
-    String topicName,
-  ) async {
-    // 10.0.2.2 for Android Emulator, localhost for iOS simulator, or real IP for device
+      String teacherId,
+      String topicName,
+      String ageGroup,
+      ) async {
     const String backendUrl = ApiConstants.notifyChildClassEndPoints;
 
     try {
@@ -60,7 +77,8 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
           "teacherId": teacherId,
           "type": "Quiz",
           "title": "New Quiz: $topicName 🧠",
-          "body": "Your teacher added a new quiz about $topicName. Try it now!",
+          "body": "A new quiz for Group $ageGroup is ready!",
+          "ageGroup": ageGroup, // Pass ageGroup so backend knows who to notify
         }),
       );
 
@@ -76,10 +94,10 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
 
   // --- SAVE LOGIC ---
   Future<void> _saveQuiz() async {
-    if (_topicController.text.trim().isEmpty) {
+    if (_topicController.text.trim().isEmpty || _selectedYear == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please enter a Topic Name"),
+          content: Text("Please enter a Topic Name and select Target Age"),
           backgroundColor: Colors.red,
         ),
       );
@@ -107,6 +125,9 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
       return;
     }
 
+    // Process Age Mapping
+    String mappedAgeGroup = _mapYearToClass(_selectedYear!);
+
     // Process tags
     List<String> tagsList = _tagsController.text
         .split(',')
@@ -130,6 +151,7 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
       levels: _levels,
       tags: tagsList,
       isSensitive: _isSensitive,
+      ageGroup: mappedAgeGroup, // Successfully passed to model
     );
 
     // 1. Add to Firebase via Provider
@@ -137,7 +159,7 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
 
     // 2. Trigger Notification (Only if not sensitive)
     if (!_isSensitive) {
-      _sendClassNotification(teacherId, newTopic.topicName);
+      _sendClassNotification(teacherId, newTopic.topicName, mappedAgeGroup);
     }
   }
 
@@ -218,16 +240,16 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
                       items: _categories
                           .map(
                             (c) => DropdownMenuItem(
-                              value: c,
-                              child: Text(
-                                c,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14.sp,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
+                          value: c,
+                          child: Text(
+                            c,
+                            style: GoogleFonts.poppins(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w600,
                             ),
-                          )
+                          ),
+                        ),
+                      )
                           .toList(),
                       onChanged: (val) =>
                           setState(() => _selectedCategory = val!),
@@ -241,6 +263,11 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
                   controller: _topicController,
                   hint: "e.g. Solar System",
                 ),
+
+                // --- NEW: Target Age Dropdown ---
+                SizedBox(height: 2.5.h),
+                _buildLabel("Target Age (Years)"),
+                _buildAgeDropdown(),
 
                 // --- Tags Field ---
                 SizedBox(height: 2.5.h),
@@ -367,14 +394,14 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
                     child: quizState.isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : Text(
-                            "PUBLISH QUIZ",
-                            style: GoogleFonts.poppins(
-                              fontSize: 15.sp,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: 1,
-                            ),
-                          ),
+                      "PUBLISH QUIZ",
+                      style: GoogleFonts.poppins(
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 1,
+                      ),
+                    ),
                   ),
                 ),
                 SizedBox(height: 3.h),
@@ -387,6 +414,43 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
   }
 
   // --- WIDGETS ---
+
+  Widget _buildAgeDropdown() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 0.5.h),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border, width: 1.5),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedYear,
+          hint: Text(
+            "Select Age",
+            style: GoogleFonts.poppins(color: Colors.grey, fontSize: 14.sp),
+          ),
+          isExpanded: true,
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: _primary),
+          items: _individualYears
+              .map(
+                (y) => DropdownMenuItem(
+              value: y,
+              child: Text(
+                "$y Years Old",
+                style: GoogleFonts.poppins(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          )
+              .toList(),
+          onChanged: (val) => setState(() => _selectedYear = val),
+        ),
+      ),
+    );
+  }
 
   Widget _buildSectionHeader(String title) {
     return Text(
@@ -536,9 +600,6 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
     );
   }
 
-  // ==========================================
-  // LEVEL EDITOR MODAL (Reused logic)
-  // ==========================================
   void _showLevelEditor({QuizLevelModel? existingLevel, int? index}) {
     final titleCtrl = TextEditingController(text: existingLevel?.title ?? "");
     final orderCtrl = TextEditingController(
@@ -578,7 +639,6 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
             ),
             child: Column(
               children: [
-                // ... (Same UI as provided in previous prompt)
                 Container(
                   width: 15.w,
                   height: 0.5.h,
@@ -683,7 +743,6 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
                             ),
                           ],
                         ),
-                        // ... list of questions ...
                         if (tempQuestions.isEmpty)
                           Center(
                             child: Padding(
@@ -721,7 +780,7 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
                                     color: Colors.red,
                                   ),
                                   onPressed: () => setModalState(
-                                    () => tempQuestions.removeAt(i),
+                                        () => tempQuestions.removeAt(i),
                                   ),
                                 ),
                               );
@@ -776,10 +835,9 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
     );
   }
 
-  // --- QUESTION EDITOR ---
   void _showQuestionEditor(BuildContext ctx, Function(QuestionModel) onSave) {
     String qText = "";
-    File? qImage; // Local file
+    File? qImage;
     final op1Ctrl = TextEditingController();
     final op2Ctrl = TextEditingController();
     final op3Ctrl = TextEditingController();
@@ -847,26 +905,25 @@ class _TeacherAddQuizScreenState extends ConsumerState<TeacherAddQuizScreen> {
                       borderRadius: BorderRadius.circular(8),
                       image: qImage != null
                           ? DecorationImage(
-                              image: FileImage(qImage!),
-                              fit: BoxFit.cover,
-                            )
+                        image: FileImage(qImage!),
+                        fit: BoxFit.cover,
+                      )
                           : null,
                     ),
                     child: qImage == null
                         ? Center(
-                            child: Text(
-                              "Tap to add Image (Optional)",
-                              style: GoogleFonts.poppins(
-                                fontSize: 12.sp,
-                                color: _primary,
-                              ),
-                            ),
-                          )
+                      child: Text(
+                        "Tap to add Image (Optional)",
+                        style: GoogleFonts.poppins(
+                          fontSize: 12.sp,
+                          color: _primary,
+                        ),
+                      ),
+                    )
                         : null,
                   ),
                 ),
                 SizedBox(height: 2.h),
-                // ... Options Logic (Same as before)
                 ...List.generate(4, (i) {
                   final ctrl = [op1Ctrl, op2Ctrl, op3Ctrl, op4Ctrl][i];
                   return Padding(

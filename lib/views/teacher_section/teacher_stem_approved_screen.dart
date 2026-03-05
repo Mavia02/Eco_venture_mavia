@@ -40,7 +40,7 @@ class TeacherStemApprovedScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyActions: false,
+
         leading: GestureDetector(
            onTap: () {
              context.goNamed('bottomNavTeacher');

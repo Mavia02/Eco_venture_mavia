@@ -1,7 +1,5 @@
 import 'package:eco_venture/models/user_model.dart';
 import 'package:eco_venture/navigation/bottom_nav_teacher.dart';
-import 'package:eco_venture/views/child_section/report_safety/child_report_issue_screen.dart';
-import 'package:eco_venture/views/child_section/report_safety/child_safety_dashboard.dart';
 import 'package:eco_venture/views/teacher_section/add_student_screen.dart';
 import 'package:eco_venture/views/teacher_section/notification/teacher_notification_screen.dart';
 import 'package:eco_venture/views/teacher_section/report_safety/teacher_report_detail_screen.dart';
@@ -42,7 +40,7 @@ class TeacherRouter {
     name: 'bottomNavTeacher',
     builder: (context, state) => const BottomNavTeacher(),
     routes: [
-      // Teacher Profile
+      // --- TEACHER PROFILE & SETTINGS ---
       GoRoute(
         path: RouteNames.teacherSettings,
         name: 'teacherSettings',
@@ -61,21 +59,14 @@ class TeacherRouter {
         ],
       ),
 
-      // Teacher Progress Dashboard
-      // GoRoute(
-      //   path: 'progress-dashboard-screen',
-      //   name: 'teacherProgressDashboard',
-      //   builder: (context, state) => const ProgressDashboardScreen(),
-      // ),
-
-      // Teacher Rewards
+      // --- TEACHER REWARDS ---
       GoRoute(
         path: 'rewards-screen',
         name: 'teacherRewardsScreen',
         builder: (context, state) => RewardsScreen(),
       ),
 
-      // Teacher Safety
+      // --- TEACHER SAFETY DASHBOARD ---
       GoRoute(
         path: RouteNames.teacherSafetyDashboard,
         name: "teacherSafetyDashboard",
@@ -89,6 +80,7 @@ class TeacherRouter {
               return TeacherReportDetailScreen(reportData: reportData);
             },
           ),
+          // Generic report route (e.g., Contact Admin from Safety Center)
           GoRoute(
             path: RouteNames.teacherSendReportScreen,
             name: "teacherSendReportScreen",
@@ -100,8 +92,7 @@ class TeacherRouter {
         ],
       ),
 
-      // Teacher Settings
-      // Teacher Home + Add Student
+      // --- TEACHER HOME & EXPLORER MANAGEMENT ---
       GoRoute(
         path: RouteNames.teacherHome,
         name: 'teacherHome',
@@ -117,16 +108,28 @@ class TeacherRouter {
             name: 'addStudentScreen',
             builder: (context, state) => const AddStudentScreen(),
           ),
+
+          // --- STUDENT DETAIL FLOW ---
           GoRoute(
             path: RouteNames.studentDetailScreen,
             name: 'studentDetailScreen',
             builder: (context, state) {
-              // CORRECTED: Create UserModel from the map passed in `state.extra`
               final studentMap = state.extra as Map<String, dynamic>;
-              final student = UserModel.fromMap(studentMap);
               return ViewStudentDetailScreen(studentData: studentMap);
             },
             routes: [
+              // FIXED: Parent Communication Route
+              // Path is 'send-report' (Relative to /teacherHome/studentDetail)
+              // Name is 'teacherContactParentScreen' (Called by button in ViewStudentDetailScreen)
+              GoRoute(
+                path: 'send-report',
+                name: 'teacherContactParentScreen',
+                builder: (context, state) {
+                  final extra = state.extra as Map<String, dynamic>;
+                  return TeacherSendReportScreen(extra: extra);
+                },
+              ),
+
               GoRoute(
                 path: RouteNames.teacherStemApprovedScreen,
                 name: 'teacherStemApprovedScreen',
@@ -135,26 +138,23 @@ class TeacherRouter {
                   if (approvedData is Map<String, dynamic>) {
                     return TeacherStemApprovedScreen(data: approvedData);
                   } else {
-                    // Fallback screen if no data is provided
-                    return Scaffold(
-                      body: Center(
-                        child: Text(
-                          "Error: Missing submission data!",
-                          style: TextStyle(color: Colors.red, fontSize: 16),
-                        ),
-                      ),
+                    return const Scaffold(
+                      body: Center(child: Text("Error: Missing submission data!")),
                     );
                   }
                 },
               ),
-
             ],
           ),
+
+          // --- DASHBOARD MODULES ---
           GoRoute(
             path: RouteNames.classReportScreen,
             name: 'classReportScreen',
             builder: (context, state) => const TeacherClassReportScreen(),
           ),
+
+          // Quiz Module
           GoRoute(
             path: RouteNames.teacherQuizDashboard,
             name: 'teacherQuizDashBoard',
@@ -169,12 +169,14 @@ class TeacherRouter {
                 path: RouteNames.teacherEditQuizScreen,
                 name: 'teacherEditQuizScreen',
                 builder: (context, state) {
-                  final dynamic quizData = state.extra; // Map or Model
+                  final dynamic quizData = state.extra;
                   return TeacherEditQuizScreen(quizData: quizData);
                 },
               ),
             ],
           ),
+
+          // STEM Module
           GoRoute(
             path: RouteNames.teacherStemChallengeDashboard,
             name: 'teacherStemChallengeDashboard',
@@ -183,25 +185,26 @@ class TeacherRouter {
               GoRoute(
                 path: RouteNames.teacherAddStemChallengeScreen,
                 name: 'teacherAddStemChallengeScreen',
-                builder: (context, state) => TeacherAddStemChallengeScreen(),
+                builder: (context, state) => const TeacherAddStemChallengeScreen(),
               ),
               GoRoute(
                 path: RouteNames.teacherEditStemChallengeScreen,
                 name: 'teacherEditStemChallengeScreen',
                 builder: (context, state) {
                   final dynamic challengeData = state.extra;
-                  return TeacherEditStemChallengeScreen(
-                    challengeData: challengeData,
-                  );
+                  return TeacherEditStemChallengeScreen(challengeData: challengeData);
                 },
               ),
             ],
           ),
+
+          // Multimedia Module
           GoRoute(
             path: RouteNames.teacherMultimediaDashboard,
             name: 'teacherMultimediaDashboard',
             builder: (context, state) => const TeacherMultimediaDashboard(),
             routes: [
+              // Videos
               GoRoute(
                 path: RouteNames.teacherVideoDashboard,
                 name: 'teacherVideoDashboard',
@@ -222,6 +225,7 @@ class TeacherRouter {
                   ),
                 ],
               ),
+              // Stories
               GoRoute(
                 path: RouteNames.teacherStoryDashboard,
                 name: 'teacherStoryDashboard',
@@ -244,6 +248,8 @@ class TeacherRouter {
               ),
             ],
           ),
+
+          // Treasure Hunt Module
           GoRoute(
             path: RouteNames.teacherTreasureHuntDashboard,
             name: 'teacherTreasureHuntDashboard',
@@ -252,8 +258,7 @@ class TeacherRouter {
               GoRoute(
                 path: RouteNames.teacherAddTreasureHuntScreen,
                 name: 'teacherAddTreasureHuntScreen',
-                builder: (context, state) =>
-                    const TeacherAddTreasureHuntScreen(),
+                builder: (context, state) => const TeacherAddTreasureHuntScreen(),
               ),
               GoRoute(
                 path: RouteNames.teacherEditTreasureHuntScreen,

@@ -4,7 +4,7 @@ class SharedPreferencesHelper {
   SharedPreferencesHelper._();
 
   static SharedPreferencesHelper instance =
-      SharedPreferencesHelper._();
+  SharedPreferencesHelper._();
   static String userIdKey = 'USERIDKEY';
   static String userNameKey = 'USERNAMEKEY';
   static String userEmailKey = 'USEREMAILKEY';
@@ -14,6 +14,7 @@ class SharedPreferencesHelper {
   static String userDOBKey = 'USERDOBKEY';
   static String userTokenKey = 'USERTOKENKEY';
   static String userImageUrlKey='USERIMAGEURLKEY';
+  static String userAgeGroupKey = 'USERAGEGROUPKEY'; // Added Age Group Key
   static const String childTeacherIdKey = 'child_teacher_id';
   static const String isTeacherAddedKey = 'is_teacher_added';
   static const String childNameKey = 'child_name';
@@ -45,6 +46,12 @@ class SharedPreferencesHelper {
   Future<bool> saveUserRole(String userRole) async {
     final pref = await SharedPreferences.getInstance();
     return pref.setString(userRoleKey, userRole);
+  }
+
+  // --- NEW: Save Age Group ---
+  Future<bool> saveUserAgeGroup(String ageGroup) async {
+    final pref = await SharedPreferences.getInstance();
+    return pref.setString(userAgeGroupKey, ageGroup);
   }
 
   Future<bool> saveUserToken(String userToken) async {
@@ -82,6 +89,13 @@ class SharedPreferencesHelper {
     final pref = await SharedPreferences.getInstance();
     return pref.getString(userRoleKey);
   }
+
+  // --- NEW: Get Age Group ---
+  Future<String?> getUserAgeGroup() async {
+    final pref = await SharedPreferences.getInstance();
+    return pref.getString(userAgeGroupKey);
+  }
+
   Future<String?> getImageUrl() async {
     final pref = await SharedPreferences.getInstance();
     return pref.getString(userImgUrlKey);
@@ -152,7 +166,7 @@ class SharedPreferencesHelper {
     await pref.remove(userImgUrlKey);
     await pref.remove(userDOBKey);
     await pref.remove(userTokenKey);
-    await pref.remove(userImgUrlKey);
+    await pref.remove(userAgeGroupKey); // Clear age group on logout
     await pref.remove(childTeacherIdKey);
     await pref.remove(isTeacherAddedKey);
     await pref.remove(childNameKey);

@@ -98,7 +98,7 @@ import 'package:responsive_sizer/responsive_sizer.dart';
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
                   _buildNavItem(Icons.home_rounded, "Home", 0),
-                  _buildNavItem(Icons.shield_rounded, "Safety", 1),
+                  _buildNavItem(Icons.message, "Inbox", 1),
                   _buildNavItem(Icons.settings_rounded, "Settings", 2),
                 ],
               ),

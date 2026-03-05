@@ -31,7 +31,8 @@ class StoryModel {
   final Map<String, bool> userLikes;
   final List<String> tags;
   final bool isSensitive;
-  final String category; // ADDED THIS FIELD
+  final String category;
+  final String ageGroup; // NEW: Added for age classification logic
 
   StoryModel({
     required this.id,
@@ -44,14 +45,14 @@ class StoryModel {
     this.likes = 0,
     this.dislikes = 0,
     this.views = 0,
-    this.createdBy = 'admin',
+    this.createdBy = 'teacher',
     Map<String, bool>? userLikes,
     this.tags = const [],
     this.isSensitive = false,
-    required this.category, // ADDED IN CONSTRUCTOR
+    required this.category,
+    required this.ageGroup, // Now required in constructor
   }) : userLikes = userLikes ?? {};
 
-  // --- 1. TO MAP (Required for Firebase Write) ---
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -68,11 +69,11 @@ class StoryModel {
       'userLikes': userLikes,
       'tags': tags,
       'isSensitive': isSensitive,
-      'category': category, // ADDED THIS
+      'category': category,
+      'ageGroup': ageGroup, // Save classification
     };
   }
 
-  // --- 2. FROM MAP ---
   factory StoryModel.fromMap(Map<String, dynamic> map) {
     final pagesList = (map['pages'] as List<dynamic>?)
         ?.map((e) => StoryPage.fromMap(Map<String, dynamic>.from(e)))
@@ -90,15 +91,15 @@ class StoryModel {
       likes: (map['likes'] as num? ?? 0).toInt(),
       dislikes: (map['dislikes'] as num? ?? 0).toInt(),
       views: (map['views'] as num? ?? 0).toInt(),
-      createdBy: map['created_by'] ?? 'admin',
+      createdBy: map['created_by'] ?? 'teacher',
       userLikes: Map<String, bool>.from(map['userLikes'] ?? {}),
       tags: List<String>.from(map['tags'] ?? []),
       isSensitive: map['isSensitive'] ?? false,
-      category: map['category'] ?? 'General', // ADDED THIS
+      category: map['category'] ?? 'General',
+      ageGroup: map['ageGroup'] ?? '6 - 8', // Load classification
     );
   }
 
-  // --- 3. COPY WITH ---
   StoryModel copyWith({
     String? id,
     String? adminId,
@@ -114,7 +115,8 @@ class StoryModel {
     Map<String, bool>? userLikes,
     List<String>? tags,
     bool? isSensitive,
-    String? category, // ADDED THIS
+    String? category,
+    String? ageGroup,
   }) {
     return StoryModel(
       id: id ?? this.id,
@@ -131,7 +133,8 @@ class StoryModel {
       userLikes: userLikes ?? this.userLikes,
       tags: tags ?? this.tags,
       isSensitive: isSensitive ?? this.isSensitive,
-      category: category ?? this.category, // ADDED THIS
+      category: category ?? this.category,
+      ageGroup: ageGroup ?? this.ageGroup,
     );
   }
 }

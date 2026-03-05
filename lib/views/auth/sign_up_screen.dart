@@ -36,7 +36,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen>
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _confirmPasswordController =
-      TextEditingController();
+  TextEditingController();
 
   // Animations
   late Animation<double> _fadeAnimation;
@@ -326,12 +326,16 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen>
                                               return; //  Exit function
                                             }
 
+                                            // Logic: Set a default age group for self-signup or based on role
+                                            String defaultAgeGroup = (selectedRole == 'child') ? "6 - 8" : "N/A";
+
                                             //  Safe: role is not null
                                             ref.read(authViewModelProvider.notifier).signUp(
                                               _emailController.text.trim(),
                                               _passwordController.text.trim(),
                                               selectedRole,
                                               "${_firstNameController.text.trim()} ${_lastNameController.text.trim()}",
+                                              defaultAgeGroup, // FIXED: Added missing ageGroup parameter
                                               onSuccess: () {
                                                 switch (selectedRole) {
                                                   case 'child':
@@ -363,8 +367,8 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen>
                                                 ),
                                               ),
                                               child:  Row(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children:
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children:
                                                 signUpState.isSignUpLoading? [
                                                   SizedBox(
                                                     height: 18,
@@ -395,13 +399,13 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen>
                                                     ),
                                                   ),
                                                 ],
-                                            ),
+                                              ),
 
-                                          ),
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    //  Error message
+                                      //  Error message
                                       if (signUpState.signUpError != null)
                                         Padding(
                                           padding: EdgeInsets.only(top: 2.h),

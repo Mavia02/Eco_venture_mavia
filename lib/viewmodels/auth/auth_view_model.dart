@@ -9,18 +9,20 @@ class AuthViewModel extends StateNotifier<AuthState> {
 
   AuthViewModel(this._repo) : super(AuthState.initial());
 
-  // Email/Password
+  /// Logic: Handles Email/Password Registration
   Future<void> signUp(
       String email,
       String password,
       String role,
-      String name, {
+      String name,
+      String ageGroup, {
         VoidCallback? onSuccess,
       }) async {
     state = state.copyWith(isSignUpLoading: true, signUpError: null);
 
     try {
-      final user = await _repo.signUpUser(email, password, role, name);
+      final user = await _repo.signUpUser(email, password, role, name, ageGroup);
+
       if (user == null) {
         state = state.copyWith(
           isSignUpLoading: false,
@@ -28,52 +30,50 @@ class AuthViewModel extends StateNotifier<AuthState> {
         );
         return;
       }
+
+      // Persist user details locally for session management and classification
+      await SharedPreferencesHelper.instance.saveUserId(user.uid);
+      await SharedPreferencesHelper.instance.saveUserAgeGroup(user.ageGroup);
+
+      // Update state and trigger navigation
       state = state.copyWith(
         isSignUpLoading: false,
         user: user,
         navigateToRole: user.role,
       );
-      await SharedPreferencesHelper.instance.saveUserId(user.uid);
-      await SharedPreferencesHelper.instance.saveUserName(user.displayName);
-      await SharedPreferencesHelper.instance.saveUserEmail(user.email);
-
-
-
 
       onSuccess?.call();
     } catch (e) {
       state = state.copyWith(
         isSignUpLoading: false,
-        signUpError: e.toString(),
+        signUpError: e.toString().replaceAll("Exception: ", ""),
       );
     }
   }
 
+  /// Logic: Handles Email/Password Login with enhanced error cleanup
   Future<void> signInUser(
       String email,
       String password, {
         Function? onSuccess,
       }) async {
-    // Clear old error + start loading
     state = state.copyWith(isSignInLoading: true, signInError: null);
 
     try {
       final user = await _repo.loginUser(email, password);
 
       if (user == null) {
-        state = state.copyWith(  // <-- must assign here
+        state = state.copyWith(
           isSignInLoading: false,
-          signInError: "Error: user is null",
+          signInError: "Authentication failed. Please try again.",
         );
         return;
       }
 
-      // Save user details locally
+      // Persist critical data for the handshake and student filtering logic
       await SharedPreferencesHelper.instance.saveUserId(user.uid);
-      await SharedPreferencesHelper.instance.saveUserName(user.displayName);
-      await SharedPreferencesHelper.instance.saveUserEmail(user.email);
+      await SharedPreferencesHelper.instance.saveUserAgeGroup(user.ageGroup);
 
-      // Update state with success
       state = state.copyWith(
         isSignInLoading: false,
         user: user,
@@ -85,12 +85,12 @@ class AuthViewModel extends StateNotifier<AuthState> {
     } catch (e) {
       state = state.copyWith(
         isSignInLoading: false,
-        signInError: e.toString(), // <-- new error shown correctly
+        signInError: e.toString().replaceAll("Exception: ", ""),
       );
     }
   }
 
-
+  /// Logic: Standard Password Reset
   Future<void> forgotPassword(String email, {Function? onSuccess}) async {
     state = state.copyWith(isForgotPasswordLoading: true, forgotPasswordError: null);
 
@@ -101,12 +101,12 @@ class AuthViewModel extends StateNotifier<AuthState> {
     } catch (e) {
       state = state.copyWith(
         isForgotPasswordLoading: false,
-        forgotPasswordError: e.toString(),
+        forgotPasswordError: e.toString().replaceAll("Exception: ", ""),
       );
     }
   }
 
-  // Google Login
+  /// Logic: Handles Google Auth Handshake
   Future<void> continueWithGoogle(String role, {Function? onSuccess}) async {
     state = state.copyWith(isGoogleLoading: true, googleError: null);
 
@@ -119,52 +119,51 @@ class AuthViewModel extends StateNotifier<AuthState> {
         );
         return;
       }
+
+      // Persist local info
       await SharedPreferencesHelper.instance.saveUserId(user.uid);
-      await SharedPreferencesHelper.instance.saveUserName(user.displayName);
-      await SharedPreferencesHelper.instance.saveUserEmail(user.email);
+      await SharedPreferencesHelper.instance.saveUserAgeGroup(user.ageGroup);
 
       state = state.copyWith(
         isGoogleLoading: false,
         user: user,
+        navigateToRole: user.role,
       );
 
       if (onSuccess != null) onSuccess();
     } catch (e) {
       state = state.copyWith(
         isGoogleLoading: false,
-        googleError: e.toString(),
+        googleError: e.toString().replaceAll("Exception: ", ""),
       );
     }
   }
-  Future<void> signOut() async {
-    state = state.copyWith(isSignOutLoading: true, signOutError: null);
 
+  /// Logic: Completely wipes the session and local preferences
+  Future<void> signOut() async {
+    state = state.copyWith(isSignOutLoading: true);
     try {
       await _repo.logout();
       await SharedPreferencesHelper.instance.clearAll();
-      state = state.copyWith(
-        isSignOutLoading: false,
-        user: null,
-        navigateToRole: null,
-      );
+      // Reset the entire AuthState to initial
+      state = AuthState.initial();
     } catch (e) {
       state = state.copyWith(
-        isSignOutLoading: false,
-        signOutError: e.toString(),
+          isSignOutLoading: false,
+          signOutError: e.toString().replaceAll("Exception: ", "")
       );
     }
   }
 
   void clearErrors() {
     state = state.copyWith(
-      signInError: null,
-      signUpError: null,
-      forgotPasswordError: null,
-      googleError: null
+        signInError: null,
+        signUpError: null,
+        forgotPasswordError: null,
+        googleError: null
     );
   }
 
-  //  Navigation
   void resetNavigation() {
     state = state.copyWith(navigateToRole: null);
   }

@@ -1,60 +1,55 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../repositories/teacher_safety_repository.dart';
-import '../../services/teacher_student_service.dart';
 import 'teacher_safety_state.dart';
 
 class TeacherSafetyViewModel extends StateNotifier<TeacherSafetyState> {
-  final TeacherSafetyRepository _repository;
-  final TeacherStudentService _studentService = TeacherStudentService();
+  final TeacherSafetyRepository _repo;
+  StreamSubscription? _subscription;
 
-  StreamSubscription? _sub;
+  TeacherSafetyViewModel(this._repo) : super(TeacherSafetyState());
 
-  TeacherSafetyViewModel(this._repository) : super(TeacherSafetyState()) {
-    // FIX: Start loading immediately when screen opens
-    loadInbox();
-  }
+  /// Logic: Initializes the stream listener.
+  /// Called by the UI to start data synchronization.
+  Future<void> fetchReports() async {
+    // Prevent double-loading UI flickers
+    if (state.isLoading && state.alerts.isNotEmpty) return;
 
-  // FIX: Changed from private (_loadInbox) to public (loadInbox)
-  void loadInbox() {
-    state = state.copyWith(isLoading: true);
-    _sub?.cancel();
+    state = state.copyWith(isLoading: true, errorMessage: null);
 
-    _sub = _repository.getInbox().listen(
-      (data) {
-        // print(" ViewModel: Loaded ${data.length} reports");
-        state = state.copyWith(isLoading: false, alerts: data);
+    await _subscription?.cancel();
+    _subscription = _repo.getInbox().listen(
+          (alertsList) {
+        state = state.copyWith(
+            isLoading: false,
+            alerts: alertsList,
+            errorMessage: null
+        );
       },
-      onError: (e) {
-        print(" ViewModel Error: $e");
-        state = state.copyWith(isLoading: false, errorMessage: e.toString());
+      onError: (error) {
+        state = state.copyWith(
+            isLoading: false,
+            errorMessage: "Failed to sync inbox: $error"
+        );
       },
     );
   }
 
-  Future<List<Map<String, String>>> getMyStudents() async {
-    // This helper is for the dropdown in Send Report screen
-    // In a real app, you might fetch this from a StudentProvider
-    return [];
-  }
-
+  /// FIXED: Added missing method required by TeacherReportDetailScreen
   Future<void> markResolved(String reportId, String? childId) async {
     try {
-      await _repository.markResolved(reportId, childId);
-      // No need to manually update state, the stream listener will auto-update UI
+      await _repo.markResolved(reportId, childId);
+      // Logic: No need to manually update state here;
+      // the Stream listener will automatically push the update to the UI.
     } catch (e) {
-      state = state.copyWith(errorMessage: "Failed to resolve: $e");
+      state = state.copyWith(errorMessage: "Could not resolve: $e");
     }
   }
 
-  Future<void> sendParentMessage(
-    String studentId,
-    String title,
-    String msg,
-  ) async {
+  Future<void> sendParentMessage(String studentId, String title, String msg) async {
     state = state.copyWith(isLoading: true);
     try {
-      await _repository.sendParentRemark(studentId, title, msg);
+      await _repo.sendParentRemark(studentId, title, msg);
       state = state.copyWith(isLoading: false, isSuccess: true);
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.toString());
@@ -64,7 +59,7 @@ class TeacherSafetyViewModel extends StateNotifier<TeacherSafetyState> {
   Future<void> sendAdminReport(String title, String msg, String type) async {
     state = state.copyWith(isLoading: true);
     try {
-      await _repository.sendAdminReport(title, msg, type);
+      await _repo.sendAdminReport(title, msg, type);
       state = state.copyWith(isLoading: false, isSuccess: true);
     } catch (e) {
       state = state.copyWith(isLoading: false, errorMessage: e.toString());
@@ -75,7 +70,7 @@ class TeacherSafetyViewModel extends StateNotifier<TeacherSafetyState> {
 
   @override
   void dispose() {
-    _sub?.cancel();
+    _subscription?.cancel();
     super.dispose();
   }
 }

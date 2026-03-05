@@ -7,6 +7,7 @@ class QuizTopicModel {
   final List<QuizLevelModel> levels;
   final bool isSensitive;
   final List<String> tags;
+  final String ageGroup; // NEW: Added for task assignment logic
 
   QuizTopicModel({
     this.id,
@@ -15,8 +16,9 @@ class QuizTopicModel {
     this.createdBy = 'teacher',
     this.creatorId = '',
     this.isSensitive = false,
-    this.tags = const [], // Default empty
+    this.tags = const [],
     required this.levels,
+    required this.ageGroup, // Now required in constructor
   });
 
   Map<String, dynamic> toMap() {
@@ -31,8 +33,9 @@ class QuizTopicModel {
       'creator_id': creatorId,
       'category': category,
       'levels': levelsMap,
-      'tags': tags, // Save tags
+      'tags': tags,
       'isSensitive': isSensitive,
+      'ageGroup': ageGroup, // Save ageGroup to Firestore
     };
   }
 
@@ -66,9 +69,10 @@ class QuizTopicModel {
       createdBy: map['created_by'] ?? 'teacher',
       creatorId: map['creator_id'] ?? '',
       levels: parsedLevels,
-      // ADDED: Load tags and sensitivity from map
       tags: List<String>.from(map['tags'] ?? []),
       isSensitive: map['isSensitive'] ?? false,
+      // Load ageGroup, default to '6 - 8' if missing for old quizzes
+      ageGroup: map['ageGroup'] ?? '6 - 8',
     );
   }
 
@@ -79,9 +83,9 @@ class QuizTopicModel {
     String? createdBy,
     String? creatorId,
     List<QuizLevelModel>? levels,
-    // ADDED: Include tags and sensitivity in copyWith
     bool? isSensitive,
     List<String>? tags,
+    String? ageGroup,
   }) {
     return QuizTopicModel(
       id: id ?? this.id,
@@ -90,9 +94,9 @@ class QuizTopicModel {
       createdBy: createdBy ?? this.createdBy,
       creatorId: creatorId ?? this.creatorId,
       levels: levels ?? this.levels,
-      // ADDED: Include tags and sensitivity
       tags: tags ?? this.tags,
       isSensitive: isSensitive ?? this.isSensitive,
+      ageGroup: ageGroup ?? this.ageGroup,
     );
   }
 }
@@ -135,7 +139,14 @@ class QuizLevelModel {
     );
   }
 
-  QuizLevelModel copyWith({int? order, String? title, int? passingPercentage, int? points, List<QuestionModel>? questions}) {
+  // FIXED: Added copyWith for use in ViewModel image processing
+  QuizLevelModel copyWith({
+    int? order,
+    String? title,
+    int? passingPercentage,
+    int? points,
+    List<QuestionModel>? questions,
+  }) {
     return QuizLevelModel(
       order: order ?? this.order,
       title: title ?? this.title,
@@ -177,7 +188,13 @@ class QuestionModel {
     );
   }
 
-  QuestionModel copyWith({String? question, List<String>? options, String? answer, String? imageUrl}) {
+  // FIXED: Added copyWith for use in ViewModel image processing
+  QuestionModel copyWith({
+    String? question,
+    List<String>? options,
+    String? answer,
+    String? imageUrl,
+  }) {
     return QuestionModel(
       question: question ?? this.question,
       options: options ?? this.options,

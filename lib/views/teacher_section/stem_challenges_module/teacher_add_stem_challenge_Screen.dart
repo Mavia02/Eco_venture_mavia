@@ -38,8 +38,6 @@ class _TeacherAddStemChallengeScreenState
     text: "50",
   );
   final TextEditingController _materialController = TextEditingController();
-
-  // --- ADDED: Tags Controller ---
   final TextEditingController _tagsController = TextEditingController();
 
   String _selectedCategory = 'Science';
@@ -52,6 +50,10 @@ class _TeacherAddStemChallengeScreenState
   String _selectedDifficulty = 'Easy';
   final List<String> _difficultyLevels = ['Easy', 'Medium', 'Hard'];
 
+  // --- NEW: Age Selection State ---
+  String? _selectedYear;
+  final List<String> _individualYears = ["6", "7", "8", "9", "10", "11", "12"];
+
   File? _challengeImage;
   List<String> _materials = ['Baking Soda', 'Vinegar'];
   List<String> _steps = [
@@ -59,16 +61,27 @@ class _TeacherAddStemChallengeScreenState
     "Observe the chemical reaction",
   ];
 
-  // --- ADDED: Sensitivity Flag ---
   bool _isSensitive = false;
-
-  // State for navigation
   bool _shouldPopAfterSave = false;
 
-  // --- NOTIFICATION LOGIC ---
+  // Logic: Map the individual year selection to the broad backend classes
+  String _mapYearToClass(String year) {
+    int age = int.parse(year);
+    if (age >= 6 && age <= 8) {
+      return "6 - 8";
+    } else if (age >= 9 && age <= 10) {
+      return "8 - 10";
+    } else if (age >= 11 && age <= 12) {
+      return "10 - 12";
+    }
+    return "6 - 8"; // Default fallback
+  }
+
+  // --- NOTIFICATION LOGIC (Updated to include ageGroup) ---
   Future<void> _sendClassNotification(
       String teacherId,
       String challengeTitle,
+      String ageGroup,
       ) async {
     const String backendUrl = ApiConstants.notifyChildClassEndPoints;
 
@@ -80,14 +93,13 @@ class _TeacherAddStemChallengeScreenState
           "teacherId": teacherId,
           "type": "STEM Challenge",
           "title": "New STEM Challenge: $challengeTitle 🔬",
-          "body": "Your teacher added a new STEM challenge: $challengeTitle. Try it now!",
+          "body": "A new STEM challenge for Group $ageGroup is ready!",
+          "ageGroup": ageGroup, // Backend uses this to target correct class
         }),
       );
 
       if (response.statusCode == 200) {
         print("✅ STEM Challenge Notification sent successfully");
-      } else {
-        print("❌ Notification failed: ${response.body}");
       }
     } catch (e) {
       print("❌ Error calling notification backend: $e");
@@ -97,32 +109,17 @@ class _TeacherAddStemChallengeScreenState
   @override
   Widget build(BuildContext context) {
     final viewModelState = ref.watch(teacherStemViewModelProvider);
-    ref.listen<TeacherStemState>(teacherStemViewModelProvider, (previous, next) {
-      if (next.errorMessage != null && next.errorMessage!.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.errorMessage!), // Shows: "Network Error: Cannot reach server..."
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    });
 
     ref.listen(teacherStemViewModelProvider, (previous, next) {
       if (next.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              next.errorMessage!,
-              style: TextStyle(fontSize: 15.sp),
-            ),
+            content: Text(next.errorMessage!, style: TextStyle(fontSize: 15.sp)),
             backgroundColor: Colors.red,
           ),
         );
       }
       if (next.isSuccess) {
-        // Updated success message with notification status
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -184,6 +181,12 @@ class _TeacherAddStemChallengeScreenState
                               hint: "e.g. Bridge Building",
                             ),
                             SizedBox(height: 2.5.h),
+
+                            // --- NEW: Target Age (Years) Dropdown ---
+                            _buildLabel("Target Age (Years)"),
+                            _buildAgeDropdown(),
+                            SizedBox(height: 2.5.h),
+
                             Row(
                               children: [
                                 Expanded(
@@ -229,7 +232,6 @@ class _TeacherAddStemChallengeScreenState
                               isNumber: true,
                             ),
 
-                            // --- ADDED: Tags Field (after points) ---
                             SizedBox(height: 2.5.h),
                             _buildLabel("Tags (comma-separated)"),
                             _buildTextField(
@@ -237,7 +239,6 @@ class _TeacherAddStemChallengeScreenState
                               hint: "e.g. chemicals, outdoor, tools, engineering",
                             ),
 
-                            // --- ADDED: Sensitivity Switch ---
                             SizedBox(height: 2.5.h),
                             SwitchListTile(
                               contentPadding: EdgeInsets.zero,
@@ -395,41 +396,38 @@ class _TeacherAddStemChallengeScreenState
     );
   }
 
-  // --- REAL SAVE LOGIC ---
+  // --- SAVE LOGIC ---
   Future<void> _saveChallenge() async {
-    if (_titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please enter a title")));
+    if (_titleController.text.trim().isEmpty || _selectedYear == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill all basics, including Target Age")),
+      );
       return;
     }
     if (_pointsController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please enter points")));
-      return;
-    }
-
-    // Get teacher ID for notification
-    String? teacherId = await SharedPreferencesHelper.instance.getUserId();
-    if (teacherId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Error: No Teacher ID. Re-login."),
-          backgroundColor: Colors.red,
-        ),
+        const SnackBar(content: Text("Please enter points")),
       );
       return;
     }
 
-    // Process tags like in QR Hunt
+    String? teacherId = await SharedPreferencesHelper.instance.getUserId();
+    if (teacherId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Error: No Teacher ID. Re-login.")),
+      );
+      return;
+    }
+
+    // Logic: Convert selected year to Class Category
+    String mappedAgeGroup = _mapYearToClass(_selectedYear!);
+
     List<String> tagsList = _tagsController.text
         .split(',')
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList();
 
-    // Sensitivity control logic
     if (_isSensitive && !tagsList.contains('scary')) {
       tagsList.add('scary');
     }
@@ -437,28 +435,25 @@ class _TeacherAddStemChallengeScreenState
       tagsList.remove('scary');
     }
 
-    // Create Model (ID will be filled by Service)
     final newChallenge = StemChallengeModel(
       title: _titleController.text.trim(),
       category: _selectedCategory,
       difficulty: _selectedDifficulty,
       points: int.tryParse(_pointsController.text.trim()) ?? 0,
-      imageUrl: _challengeImage?.path, // Local path
+      imageUrl: _challengeImage?.path,
       materials: _materials,
       steps: _steps,
-      // Include tags and sensitivity
       tags: tagsList,
       isSensitive: _isSensitive,
+      ageGroup: mappedAgeGroup, // Stored for student filtering
     );
 
-    // Save to Firebase
     await ref
         .read(teacherStemViewModelProvider.notifier)
         .addChallenge(newChallenge);
 
-    // Send notification only if not sensitive
     if (!_isSensitive) {
-      await _sendClassNotification(teacherId, newChallenge.title);
+      await _sendClassNotification(teacherId, newChallenge.title, mappedAgeGroup);
     }
   }
 
@@ -467,17 +462,59 @@ class _TeacherAddStemChallengeScreenState
       _titleController.clear();
       _pointsController.text = "50";
       _materialController.clear();
-      _tagsController.clear(); // Clear tags
+      _tagsController.clear();
       _selectedCategory = _categories.first;
       _selectedDifficulty = _difficultyLevels.first;
+      _selectedYear = null; // Clear year
       _challengeImage = null;
       _materials = [];
       _steps = [];
-      _isSensitive = false; // Reset sensitivity
+      _isSensitive = false;
     });
   }
 
-  // --- WIDGET BUILDERS (Same as before) ---
+  // --- WIDGET BUILDERS ---
+
+  Widget _buildAgeDropdown() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 0.5.h),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FA),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedYear,
+          hint: Text(
+            "Select Age",
+            style: GoogleFonts.poppins(color: Colors.grey, fontSize: 15.sp),
+          ),
+          isExpanded: true,
+          icon: Icon(
+            Icons.keyboard_arrow_down,
+            color: _primaryBlue,
+            size: 22.sp,
+          ),
+          items: _individualYears
+              .map(
+                (y) => DropdownMenuItem(
+              value: y,
+              child: Text(
+                "$y Years Old",
+                style: GoogleFonts.poppins(
+                  fontSize: 15.sp,
+                  color: _textDark,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          )
+              .toList(),
+          onChanged: (v) => setState(() => _selectedYear = v),
+        ),
+      ),
+    );
+  }
 
   Widget _buildHeader() {
     return Container(
@@ -773,44 +810,6 @@ class _TeacherAddStemChallengeScreenState
             ),
           ],
         )
-    );
-  }
-
-  Widget _buildDashedAddButton({
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return CustomPaint(
-      painter: DashedRectPainter(
-        color: _dashedBorderColor,
-        strokeWidth: 1.5,
-        gap: 5,
-        radius: 10,
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          width: double.infinity,
-          padding: EdgeInsets.symmetric(vertical: 1.5.h),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_circle, color: _primaryBlue, size: 16.sp),
-              SizedBox(width: 2.w),
-              Text(
-                label,
-                style: GoogleFonts.poppins(
-                  fontSize: 14.sp,
-                  fontWeight: FontWeight.w600,
-                  color: _primaryBlue,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 

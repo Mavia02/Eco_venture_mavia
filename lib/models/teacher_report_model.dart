@@ -1,13 +1,14 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class TeacherReportModel {
   final String id;
   final String title;
   final String description;
-  final String fromName; // "Parent of Ali" or "Student: Sara"
-  final String type; // 'Safety', 'Content', 'Bug', 'Behavior'
-  final String status; // 'Pending', 'Resolved'
+  final String fromName;
+  final String type;
+  final String status;
   final DateTime timestamp;
 
-  // Context Data (Optional)
   final String? childId;
   final String? parentId;
   final String? contentId;
@@ -25,18 +26,58 @@ class TeacherReportModel {
     this.contentId,
   });
 
-  factory TeacherReportModel.fromMap(String id, Map<String, dynamic> map) {
+  /// Factory logic redesigned to be "Bulletproof" against database inconsistencies.
+  factory TeacherReportModel.fromMap(String id, Map<String, dynamic>? map) {
+    if (map == null) {
+      return _errorReport(id);
+    }
+
+    try {
+      // 1. ROBUST TIMESTAMP HANDLING
+      DateTime parsedTime;
+      var rawTime = map['timestamp'] ?? map['createdAt'];
+
+      if (rawTime is Timestamp) {
+        parsedTime = rawTime.toDate();
+      } else if (rawTime is String) {
+        parsedTime = DateTime.tryParse(rawTime) ?? DateTime.now();
+      } else if (rawTime is int) {
+        parsedTime = DateTime.fromMillisecondsSinceEpoch(rawTime);
+      } else {
+        parsedTime = DateTime.now();
+      }
+
+      // 2. SAFE STRING CASTING Helper
+      String safeStr(dynamic v, String def) => (v == null) ? def : v.toString();
+
+      return TeacherReportModel(
+        id: id,
+        title: safeStr(map['title'], 'Alert'),
+        description: safeStr(map['description'] ?? map['message'], ''),
+        fromName: safeStr(map['fromName'] ?? map['senderName'], 'Unknown Explorer'),
+        type: safeStr(map['type'], 'General'),
+        status: safeStr(map['status'], 'Pending'),
+        timestamp: parsedTime,
+        childId: map['childId']?.toString(),
+        parentId: map['parentId']?.toString(),
+        contentId: map['contentId']?.toString(),
+      );
+    } catch (e) {
+      // Logic: If any field causes a crash, return a safe "corrupted" object
+      // instead of breaking the entire app.
+      return _errorReport(id);
+    }
+  }
+
+  static TeacherReportModel _errorReport(String id) {
     return TeacherReportModel(
       id: id,
-      title: map['title'] ?? 'Alert',
-      description: map['description'] ?? '',
-      fromName: map['fromName'] ?? 'Unknown',
-      type: map['type'] ?? 'General',
-      status: map['status'] ?? 'Pending',
-      timestamp: DateTime.tryParse(map['timestamp'] ?? '') ?? DateTime.now(),
-      childId: map['childId'],
-      parentId: map['parentId'],
-      contentId: map['contentId'],
+      title: 'Data Error',
+      description: 'This report has a format error in the database.',
+      fromName: 'System',
+      type: 'Bug',
+      status: 'Resolved',
+      timestamp: DateTime.now(),
     );
   }
 

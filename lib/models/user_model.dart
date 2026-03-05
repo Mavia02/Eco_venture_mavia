@@ -6,9 +6,10 @@ class UserModel {
   final String displayName;
   final String role;
   final DateTime createdAt;
+  final String ageGroup;
   final String? imgUrl;
   final String? phoneNumber;
-  final String? token; // optional, in case backend sends token with user
+  final String? token;
 
   UserModel({
     required this.uid,
@@ -18,16 +19,17 @@ class UserModel {
     required this.email,
     required this.displayName,
     required this.role,
+    required this.ageGroup,
     this.token,
   });
 
-  // Convert to Map
   Map<String, dynamic> toMap() {
     return {
       "uid": uid,
       "email": email,
       "displayName": displayName,
       "role": role,
+      "ageGroup": ageGroup,
       "createdAt": createdAt.toIso8601String(),
       "token": token,
       "imgUrl": imgUrl,
@@ -35,17 +37,21 @@ class UserModel {
     };
   }
 
-  // Convert to JSON String
   String toJson() => json.encode(toMap());
+
   factory UserModel.fromMap(Map<String, dynamic> map) {
-    // Helper function: Safely converts ANYTHING to a String to prevent crashes
     String safeString(dynamic value) {
       if (value == null) return "";
       if (value is String) return value;
-      return value.toString(); // Fixes "Map is not subtype of string" error
+      return value.toString();
     }
 
-    //  Case 1: Backend sends { user: {...}, token: "..." }
+    // Logic: Helper to look for 'ageGroup' or 'age_group' to prevent default error
+    String getAgeGroup(Map<String, dynamic> m) {
+      String val = safeString(m['ageGroup'] ?? m['age_group']);
+      return val.isEmpty ? "6 - 8" : val;
+    }
+
     if (map.containsKey('user') && map['user'] is Map) {
       final userMap = map['user'] as Map<String, dynamic>;
       return UserModel(
@@ -55,7 +61,7 @@ class UserModel {
         email: safeString(userMap['email']),
         displayName: safeString(userMap['displayName']),
         role: safeString(userMap['role']),
-        // Safe Date Parsing
+        ageGroup: getAgeGroup(userMap),
         createdAt: userMap['createdAt'] != null
             ? DateTime.tryParse(userMap['createdAt'].toString()) ?? DateTime.now()
             : DateTime.now(),
@@ -63,7 +69,6 @@ class UserModel {
       );
     }
 
-    //  Case 2: Flat JSON
     return UserModel(
       uid: safeString(map['uid']),
       email: safeString(map['email']),
@@ -71,6 +76,7 @@ class UserModel {
       imgUrl: safeString(map['imgUrl']),
       phoneNumber: safeString(map['phoneNumber']),
       role: safeString(map['role']),
+      ageGroup: getAgeGroup(map),
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
@@ -78,7 +84,6 @@ class UserModel {
     );
   }
 
-  // Create from JSON string
   factory UserModel.fromJson(String source) =>
       UserModel.fromMap(json.decode(source));
 
@@ -87,6 +92,7 @@ class UserModel {
     String? email,
     String? displayName,
     String? role,
+    String? ageGroup,
     DateTime? createdAt,
     String? imgUrl,
     String? phoneNumber,
@@ -99,6 +105,7 @@ class UserModel {
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
       role: role ?? this.role,
+      ageGroup: ageGroup ?? this.ageGroup,
       createdAt: createdAt ?? this.createdAt,
       token: token ?? this.token,
     );

@@ -10,6 +10,7 @@ class StemChallengeModel {
   final List<String> steps;
   final bool isSensitive;
   final List<String> tags;
+  final String ageGroup; // NEW: Added for classification logic
 
   StemChallengeModel({
     this.id,
@@ -21,8 +22,9 @@ class StemChallengeModel {
     this.imageUrl,
     required this.materials,
     this.isSensitive = false,
-    this.tags = const [], // Default empty
+    this.tags = const [],
     required this.steps,
+    required this.ageGroup, // Now required in constructor
   });
 
   // Convert to Map for Firebase Realtime Database (Writing)
@@ -37,8 +39,9 @@ class StemChallengeModel {
       'imageUrl': imageUrl,
       'materials': materials,
       'steps': steps,
-      'tags': tags, // Save tags
+      'tags': tags,
       'isSensitive': isSensitive,
+      'ageGroup': ageGroup, // Save classification
     };
   }
 
@@ -56,6 +59,8 @@ class StemChallengeModel {
       steps: List<String>.from(map['steps'] ?? []),
       isSensitive: map['isSensitive'] ?? false,
       tags: List<String>.from(map['tags'] ?? []),
+      // Load ageGroup, defaulting to '6 - 8' for existing data
+      ageGroup: map['ageGroup'] ?? '6 - 8',
     );
   }
 
@@ -72,6 +77,7 @@ class StemChallengeModel {
     List<String>? tags,
     bool? isSensitive,
     List<String>? steps,
+    String? ageGroup,
   }) {
     return StemChallengeModel(
       id: id ?? this.id,
@@ -85,6 +91,7 @@ class StemChallengeModel {
       steps: steps ?? this.steps,
       tags: tags ?? this.tags,
       isSensitive: isSensitive ?? this.isSensitive,
+      ageGroup: ageGroup ?? this.ageGroup,
     );
   }
 }

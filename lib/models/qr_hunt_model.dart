@@ -8,12 +8,12 @@ class QrHuntModel {
   final String? qrCodeUrl; // URL of generated QR image (optional)
   final DateTime createdAt;
   final List<String> tags;
-  // --- TRACKING FIELDS (For Child Progress) ---
   final int cluesFound; // How many clues the child has scanned
   final bool isCompleted;
   final DateTime? startedAt;
   final DateTime? completedAt;
   final bool isSensitive;
+  final String ageGroup; // NEW: Added for classification logic
 
   QrHuntModel({
     this.id,
@@ -21,7 +21,7 @@ class QrHuntModel {
     required this.title,
     required this.points,
     required this.difficulty,
-    this.isSensitive=false,
+    this.isSensitive = false,
     required this.clues,
     this.qrCodeUrl,
     this.tags = const [],
@@ -30,6 +30,7 @@ class QrHuntModel {
     this.isCompleted = false,
     this.startedAt,
     this.completedAt,
+    required this.ageGroup, // Now required in constructor
   });
 
   Map<String, dynamic> toMap() {
@@ -46,8 +47,9 @@ class QrHuntModel {
       'isCompleted': isCompleted,
       'startedAt': startedAt?.toIso8601String(),
       'completedAt': completedAt?.toIso8601String(),
-      'tags': tags, // Save tags
+      'tags': tags,
       'isSensitive': isSensitive,
+      'ageGroup': ageGroup, // Save classification
     };
   }
 
@@ -67,6 +69,7 @@ class QrHuntModel {
       startedAt: map['startedAt'] != null ? DateTime.tryParse(map['startedAt']) : null,
       completedAt: map['completedAt'] != null ? DateTime.tryParse(map['completedAt']) : null,
       tags: List<String>.from(map['tags'] ?? []),
+      ageGroup: map['ageGroup'] ?? '6 - 8', // Load classification
     );
   }
 
@@ -84,7 +87,8 @@ class QrHuntModel {
     DateTime? startedAt,
     DateTime? completedAt,
     List<String>? tags,
-    bool?  isSensitive
+    bool? isSensitive,
+    String? ageGroup,
   }) {
     return QrHuntModel(
       id: id ?? this.id,
@@ -99,8 +103,9 @@ class QrHuntModel {
       isCompleted: isCompleted ?? this.isCompleted,
       startedAt: startedAt ?? this.startedAt,
       completedAt: completedAt ?? this.completedAt,
-        isSensitive: isSensitive ?? this.isSensitive,
-        tags: tags ?? this.tags
+      isSensitive: isSensitive ?? this.isSensitive,
+      tags: tags ?? this.tags,
+      ageGroup: ageGroup ?? this.ageGroup,
     );
   }
 }

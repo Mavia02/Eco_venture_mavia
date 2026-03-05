@@ -10,7 +10,6 @@ import '../../viewmodels/teacher_student_detail/teacher_student_detail_provider.
 class ViewStudentDetailScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> studentData;
   const ViewStudentDetailScreen({super.key, required this.studentData});
-
   @override
   ConsumerState<ViewStudentDetailScreen> createState() =>
       _ViewStudentDetailScreenState();
@@ -20,289 +19,25 @@ class _ViewStudentDetailScreenState
     extends ConsumerState<ViewStudentDetailScreen> {
   final Color _bg = const Color(0xFFF4F7FE);
   final Color _textDark = const Color(0xFF1B2559);
+  final Color _primaryBlue = const Color(0xFF1565C0);
 
-  // --- COLORS FOR STATUS ---
+  // --- COLORS FOR STATUS & TYPES ---
   final Color _green = const Color(0xFF00C853);
   final Color _red = const Color(0xFFE53935);
   final Color _blue = const Color(0xFF2979FF);
   final Color _amber = const Color(0xFFFFAB00);
+  final Color _purple = const Color(0xFF8E2DE2);
 
   @override
   void initState() {
     super.initState();
     final String uid = widget.studentData['uid'];
     Future.microtask(
-      () => ref
+          () => ref
           .read(teacherStudentDetailViewModelProvider.notifier)
           .loadStudent(uid),
     );
   }
-
-  // --- UPDATED REVIEW DIALOG ---
-  // void _showReviewDialog(Map<String, dynamic> activity) {
-  //   if (activity['type'] != 'STEM') return;
-  //
-  //   final TextEditingController feedbackCtrl = TextEditingController();
-  //   final TextEditingController pointsCtrl = TextEditingController(text: "50");
-  //
-  //   final submissionData = activity['data'] as Map<String, dynamic>;
-  //   final String status = submissionData['status'] ?? 'pending';
-  //
-  //   /// ✅ FIX: Collect ALL image URLs
-  //   final List<String> imageUrls = [];
-  //
-  //   void extractImages(dynamic imgs) {
-  //     if (imgs is List) {
-  //       for (var img in imgs) {
-  //         if (img != null) imageUrls.add(img.toString());
-  //       }
-  //     } else if (imgs is String) {
-  //       imageUrls.add(imgs);
-  //     }
-  //   }
-  //
-  //   if (submissionData['proofImageUrls'] != null) {
-  //     extractImages(submissionData['proofImageUrls']);
-  //   }
-  //
-  //   if (submissionData['proof_image_urls'] != null) {
-  //     extractImages(submissionData['proof_image_urls']);
-  //   }
-  //
-  //   showDialog(
-  //     context: context,
-  //     builder: (ctx) => AlertDialog(
-  //       backgroundColor: Colors.white,
-  //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-  //       scrollable: true,
-  //       title: Text(
-  //         "Review Submission",
-  //         style: GoogleFonts.poppins(
-  //           fontWeight: FontWeight.bold,
-  //           fontSize: 18.sp,
-  //         ),
-  //       ),
-  //       content: Column(
-  //         crossAxisAlignment: CrossAxisAlignment.start,
-  //         mainAxisSize: MainAxisSize.min,
-  //         children: [
-  //           // Challenge Title
-  //           Text(
-  //             "Challenge:",
-  //             style: TextStyle(
-  //               fontWeight: FontWeight.bold,
-  //               fontSize: 13.sp,
-  //               color: Colors.grey[700],
-  //             ),
-  //           ),
-  //           Text(
-  //             "${submissionData['challenge_title'] ?? 'Unknown'}",
-  //             style: GoogleFonts.poppins(
-  //               fontSize: 15.sp,
-  //               fontWeight: FontWeight.w600,
-  //             ),
-  //           ),
-  //
-  //           SizedBox(height: 2.h),
-  //
-  //           /// ✅ FIXED: MULTIPLE IMAGES VIEW
-  //           if (imageUrls.isNotEmpty)
-  //             SizedBox(
-  //               height: 20.h,
-  //               child: ListView.separated(
-  //                 scrollDirection: Axis.horizontal,
-  //                 itemCount: imageUrls.length,
-  //                 separatorBuilder: (_, __) => SizedBox(width: 3.w),
-  //                 itemBuilder: (context, index) {
-  //                   return ClipRRect(
-  //                     borderRadius: BorderRadius.circular(12),
-  //                     child: Image.network(
-  //                       imageUrls[index],
-  //                       width: 70.w,
-  //                       fit: BoxFit.cover,
-  //                       errorBuilder: (c, e, s) => Container(
-  //                         width: 70.w,
-  //                         color: Colors.grey[200],
-  //                         child: const Center(child: Icon(Icons.broken_image)),
-  //                       ),
-  //                     ),
-  //                   );
-  //                 },
-  //               ),
-  //             )
-  //           else
-  //             Container(
-  //               height: 15.h,
-  //               width: double.infinity,
-  //               decoration: BoxDecoration(
-  //                 color: Colors.grey[100],
-  //                 borderRadius: BorderRadius.circular(12),
-  //               ),
-  //               child: const Center(child: Text("No Image Uploaded")),
-  //             ),
-  //
-  //           SizedBox(height: 2.h),
-  //
-  //           Row(
-  //             children: [
-  //               Icon(
-  //                 Icons.calendar_today_rounded,
-  //                 size: 14.sp,
-  //                 color: Colors.blue,
-  //               ),
-  //               SizedBox(width: 2.w),
-  //               Text(
-  //                 "Days Taken: ${submissionData['days_taken'] ?? 'N/A'}",
-  //                 style: TextStyle(fontSize: 13.sp, color: Colors.grey[800]),
-  //               ),
-  //             ],
-  //           ),
-  //
-  //           SizedBox(height: 3.h),
-  //
-  //           if (status == 'pending') ...[
-  //             Text(
-  //               "Award Points",
-  //               style: TextStyle(
-  //                 fontWeight: FontWeight.bold,
-  //                 fontSize: 13.sp,
-  //                 color: Colors.grey[700],
-  //               ),
-  //             ),
-  //             SizedBox(height: 1.h),
-  //             TextField(
-  //               controller: pointsCtrl,
-  //               keyboardType: TextInputType.number,
-  //               decoration: InputDecoration(
-  //                 hintText: "50",
-  //                 contentPadding: EdgeInsets.symmetric(horizontal: 4.w),
-  //                 border: OutlineInputBorder(
-  //                   borderRadius: BorderRadius.circular(12),
-  //                 ),
-  //                 suffixText: "XP",
-  //               ),
-  //             ),
-  //             SizedBox(height: 2.h),
-  //
-  //             Text(
-  //               "Feedback",
-  //               style: TextStyle(
-  //                 fontWeight: FontWeight.bold,
-  //                 fontSize: 13.sp,
-  //                 color: Colors.grey[700],
-  //               ),
-  //             ),
-  //             SizedBox(height: 1.h),
-  //             TextField(
-  //               controller: feedbackCtrl,
-  //               maxLines: 2,
-  //               decoration: InputDecoration(
-  //                 hintText: "Great job! / Try again...",
-  //                 contentPadding: EdgeInsets.all(4.w),
-  //                 border: OutlineInputBorder(
-  //                   borderRadius: BorderRadius.circular(12),
-  //                 ),
-  //                 filled: true,
-  //                 fillColor: const Color(0xFFF5F7FA),
-  //               ),
-  //             ),
-  //           ] else ...[
-  //             Container(
-  //               padding: EdgeInsets.all(3.w),
-  //               width: double.infinity,
-  //               decoration: BoxDecoration(
-  //                 color: status == 'approved'
-  //                     ? _green.withOpacity(0.1)
-  //                     : _red.withOpacity(0.1),
-  //                 borderRadius: BorderRadius.circular(12),
-  //                 border: Border.all(
-  //                   color: status == 'approved' ? _green : _red,
-  //                 ),
-  //               ),
-  //               child: Column(
-  //                 children: [
-  //                   Text(
-  //                     "Status: ${status.toUpperCase()}",
-  //                     style: TextStyle(
-  //                       fontWeight: FontWeight.bold,
-  //                       color: status == 'approved' ? _green : _red,
-  //                     ),
-  //                   ),
-  //                   if (status == 'approved')
-  //                     Text(
-  //                       "+${submissionData['points_awarded']} XP Awarded",
-  //                       style: TextStyle(color: _green),
-  //                     ),
-  //                 ],
-  //               ),
-  //             ),
-  //           ],
-  //         ],
-  //       ),
-  //       actions: [
-  //         TextButton(
-  //           onPressed: () => Navigator.pop(ctx),
-  //           child: const Text("Close", style: TextStyle(color: Colors.grey)),
-  //         ),
-  //         if (status == 'pending') ...[
-  //           ElevatedButton(
-  //             style: ElevatedButton.styleFrom(
-  //               backgroundColor: _red,
-  //               shape: RoundedRectangleBorder(
-  //                 borderRadius: BorderRadius.circular(10),
-  //               ),
-  //             ),
-  //             onPressed: () {
-  //               ref
-  //                   .read(teacherStudentDetailViewModelProvider.notifier)
-  //                   .markStemSubmission(
-  //                     studentId: widget.studentData['uid'],
-  //                     challengeId: submissionData['challenge_id'].toString(),
-  //                     approved: false,
-  //                     points: 0,
-  //                     feedback: feedbackCtrl.text.isEmpty
-  //                         ? "Try again."
-  //                         : feedbackCtrl.text,
-  //                   );
-  //               Navigator.pop(ctx);
-  //             },
-  //             child: const Text(
-  //               "Reject",
-  //               style: TextStyle(color: Colors.white),
-  //             ),
-  //           ),
-  //           ElevatedButton(
-  //             style: ElevatedButton.styleFrom(
-  //               backgroundColor: _green,
-  //               shape: RoundedRectangleBorder(
-  //                 borderRadius: BorderRadius.circular(10),
-  //               ),
-  //             ),
-  //             onPressed: () {
-  //               int pts = int.tryParse(pointsCtrl.text) ?? 50;
-  //               ref
-  //                   .read(teacherStudentDetailViewModelProvider.notifier)
-  //                   .markStemSubmission(
-  //                     studentId: widget.studentData['uid'],
-  //                     challengeId: submissionData['challenge_id'].toString(),
-  //                     approved: true,
-  //                     points: pts,
-  //                     feedback: feedbackCtrl.text.isEmpty
-  //                         ? "Great work!"
-  //                         : feedbackCtrl.text,
-  //                   );
-  //               Navigator.pop(ctx);
-  //             },
-  //             child: const Text(
-  //               "Approve",
-  //               style: TextStyle(color: Colors.white),
-  //             ),
-  //           ),
-  //         ],
-  //       ],
-  //     ),
-  //   );
-  // }
 
   @override
   Widget build(BuildContext context) {
@@ -329,18 +64,25 @@ class _ViewStudentDetailScreenState
         ),
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: const BackButton(color: Colors.black),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(5.w),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 1. Profile Banner
             _buildProfileBanner(
               student.name,
               student.email,
               student.currentLevel,
             ),
             SizedBox(height: 3.h),
+
+            // 2. Stats Grid (XP, Quiz, STEM)
             _buildStatsGrid(
               student.totalXP,
               student.quizzesPassed,
@@ -348,43 +90,28 @@ class _ViewStudentDetailScreenState
               student.qrHuntsCompleted,
             ),
             SizedBox(height: 4.h),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                "Activity History",
-                style: GoogleFonts.poppins(
-                  fontSize: 17.sp,
-                  fontWeight: FontWeight.bold,
-                  color: _textDark,
-                ),
-              ),
-            ),
+
+            // --- SECTION: PARENT COMMUNICATION HUB ---
+            // UPDATED: Renamed from Parent Liaison
+            _buildSectionHeader("Parent Remarks", Icons.record_voice_over_outlined),
+            SizedBox(height: 1.5.h),
+            _buildElongatedContactButton(student.name, widget.studentData['uid']),
+
+            SizedBox(height: 3.h),
+
+            // --- REMARKS HISTORY SECTION ---
+            _buildSectionHeader("Past Remarks", Icons.history_edu_rounded),
+            SizedBox(height: 1.5.h),
+            _buildRemarksHistoryList(student.recentActivity),
+
+            SizedBox(height: 4.h),
+
+            // 3. Activity History (Standard Learning Tasks)
+            _buildSectionHeader("Learning Activity", Icons.history_rounded),
             SizedBox(height: 2.h),
-            if (student.recentActivity.isEmpty)
-              Container(
-                padding: EdgeInsets.all(5.w),
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Center(
-                  child: Text(
-                    "No activity recorded yet.",
-                    style: GoogleFonts.poppins(color: Colors.grey),
-                  ),
-                ),
-              )
-            else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: student.recentActivity.length,
-                itemBuilder: (context, index) {
-                  final item = student.recentActivity[index];
-                  return _buildActivityTile(item);
-                },
-              ),
+            _buildLearningActivityList(student.recentActivity),
+
+            SizedBox(height: 4.h),
           ],
         ),
       ),
@@ -392,6 +119,205 @@ class _ViewStudentDetailScreenState
   }
 
   // --- WIDGETS ---
+
+  Widget _buildSectionHeader(String title, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, size: 17.sp, color: _primaryBlue),
+        SizedBox(width: 2.w),
+        Text(
+          title,
+          style: GoogleFonts.poppins(
+            fontSize: 17.sp,
+            fontWeight: FontWeight.bold,
+            color: _textDark,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(String text) {
+    return Container(
+      padding: EdgeInsets.all(5.w),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Center(
+        child: Text(
+          text,
+          style: GoogleFonts.poppins(color: Colors.grey, fontSize: 13.sp),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRemarksHistoryList(List<dynamic> activities) {
+    final remarks = activities.where((a) => a['type'] == 'Remark').toList();
+
+    if (remarks.isEmpty) {
+      return _buildEmptyState("No remarks sent to family yet.");
+    }
+
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: remarks.length,
+      separatorBuilder: (_, __) => SizedBox(height: 1.5.h),
+      itemBuilder: (context, index) {
+        final remark = remarks[index];
+        return Container(
+          padding: EdgeInsets.all(4.w),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.withOpacity(0.1)),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 2.5.w, vertical: 0.5.h),
+                    decoration: BoxDecoration(
+                      color: _purple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      remark['subtitle'] ?? "General",
+                      style: GoogleFonts.poppins(
+                        fontSize: 11.sp,
+                        fontWeight: FontWeight.bold,
+                        color: _purple,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    timeago.format(DateTime.parse(remark['time'])),
+                    style: TextStyle(fontSize: 11.sp, color: Colors.grey),
+                  ),
+                ],
+              ),
+              SizedBox(height: 1.h),
+              Text(
+                remark['title'] ?? "No Title",
+                style: GoogleFonts.poppins(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w700,
+                  color: _textDark,
+                ),
+              ),
+              if (remark['message'] != null) ...[
+                SizedBox(height: 0.5.h),
+                Text(
+                  remark['message'],
+                  style: GoogleFonts.poppins(fontSize: 13.sp, color: Colors.grey[700]),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLearningActivityList(List<dynamic> activities) {
+    final learningActivities = activities.where((a) => a['type'] != 'Remark').toList();
+
+    if (learningActivities.isEmpty) {
+      return _buildEmptyState("No learning activity recorded yet.");
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: learningActivities.length,
+      itemBuilder: (context, index) {
+        return _buildActivityTile(learningActivities[index]);
+      },
+    );
+  }
+
+  Widget _buildElongatedContactButton(String studentName, String uid) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          context.pushNamed('teacherContactParentScreen', extra: {
+            'type': 'Parent',
+            'studentId': uid,
+            'studentName': studentName,
+          });
+        },
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          width: double.infinity,
+          padding: EdgeInsets.all(4.5.w),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [_primaryBlue, const Color(0xFF42A5F5)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: _primaryBlue.withOpacity(0.25),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(2.5.w),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.send_rounded, color: Colors.white, size: 20.sp),
+              ),
+              SizedBox(width: 4.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Message Parent", // UPDATED: From Message Family
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16.sp,
+                      ),
+                    ),
+                    Text(
+                      "Contact parents of $studentName regarding progress.",
+                      style: GoogleFonts.poppins(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 12.sp,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 15.sp),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildProfileBanner(String name, String email, int level) {
     return Container(
       width: double.infinity,
@@ -516,18 +442,12 @@ class _ViewStudentDetailScreenState
     final String title = activity['title'].toString();
     final bool isSubmission = activity['type'] == 'STEM';
 
-    // Extract status safely
-    final String status =
-        activity['subtitle']?.toString().toLowerCase() ?? '';
+    final String status = activity['subtitle']?.toString().toLowerCase() ?? '';
+    final bool isPendingOrRejected = status.contains('pending') || status.contains('rejected');
 
-    final bool isPendingOrRejected =
-        status.contains('pending') || status.contains('rejected');
-
-    // Status UI logic (UNCHANGED)
     bool isPositive = activity['isPositive'] == true;
     Color statusColor = isPositive ? _green : _red;
-    IconData icon =
-    isPositive ? Icons.check_circle_rounded : Icons.cancel_rounded;
+    IconData icon = isPositive ? Icons.check_circle_rounded : Icons.cancel_rounded;
 
     if (isSubmission) {
       if (status.contains('pending')) {
@@ -559,7 +479,6 @@ class _ViewStudentDetailScreenState
         );
       }
           : null,
-
       child: Container(
         margin: EdgeInsets.only(bottom: 1.5.h),
         padding: EdgeInsets.all(4.w),
@@ -603,8 +522,7 @@ class _ViewStudentDetailScreenState
                   SizedBox(height: 0.5.h),
                   Row(
                     children: [
-                      Icon(Icons.access_time,
-                          size: 12.sp, color: Colors.grey),
+                      Icon(Icons.access_time, size: 12.sp, color: Colors.grey),
                       SizedBox(width: 1.w),
                       Expanded(
                         child: Text(
@@ -631,5 +549,4 @@ class _ViewStudentDetailScreenState
       ),
     );
   }
-
 }

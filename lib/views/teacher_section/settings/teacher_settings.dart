@@ -27,10 +27,12 @@ class _TeacherSettingsState extends State<TeacherSettings>
   Future<void> _loadUsername() async {
     final name = await SharedPreferencesHelper.instance.getUserName();
     final image = await SharedPreferencesHelper.instance.getUserImgUrl();
-    setState(() {
-      username = name ?? "Guest";
-      userImageUrl = image ?? "";
-    });
+    if (mounted) {
+      setState(() {
+        username = name ?? "Guest";
+        userImageUrl = image ?? "";
+      });
+    }
   }
 
   @override
@@ -42,12 +44,11 @@ class _TeacherSettingsState extends State<TeacherSettings>
       vsync: this,
     );
 
-    // Very subtle shrink & grow
     _profileImagePulse = Tween<double>(begin: 0.95, end: 1.05).animate(
       CurvedAnimation(parent: _profileImageController, curve: Curves.easeInOut),
     );
 
-    _profileImageController.repeat(reverse: true); // smooth loop
+    _profileImageController.repeat(reverse: true);
     _loadUsername();
   }
 
@@ -60,7 +61,7 @@ class _TeacherSettingsState extends State<TeacherSettings>
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, // prevents auto pop
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
           context.goNamed('bottomNavTeacher');
@@ -97,24 +98,24 @@ class _TeacherSettingsState extends State<TeacherSettings>
                                     width: 15.h,
                                     child: userImageUrl.isNotEmpty
                                         ? Image.network(
-                                            userImageUrl,
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (context, error, stackTrace) {
-                                                  return const Icon(
-                                                    Icons.person,
-                                                    size: 50,
-                                                    color: Colors.grey,
-                                                  );
-                                                },
-                                          )
+                                      userImageUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                        return const Icon(
+                                          Icons.person,
+                                          size: 50,
+                                          color: Colors.grey,
+                                        );
+                                      },
+                                    )
                                         : Center(
-                                            child: Icon(
-                                              Icons.person,
-                                              color: Colors.blueAccent,
-                                              size: 20.w,
-                                            ),
-                                          ),
+                                      child: Icon(
+                                        Icons.person,
+                                        color: Colors.blueAccent,
+                                        size: 20.w,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -149,76 +150,65 @@ class _TeacherSettingsState extends State<TeacherSettings>
               child: Column(
                 children: [
                   SizedBox(height: 2.h),
+
+                  // 1. Profile Tile
                   GestureDetector(
-                    onTap: () {
-                      context.goNamed('teacherProfile');
-                    },
+                    onTap: () => context.goNamed('teacherProfile'),
                     child: SettingsTile(
                       title: "Profile",
                       subtitle: "Manage your personal \ninformation",
                       circleColor: Colors.blue,
                       leadingIcon: Icons.person_outline,
-                      trailing: Container(
-                        height: 5.h,
-                        width: 10.w,
-                        decoration: BoxDecoration(
-                          color: Colors.blueGrey.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.blue,
-                        ),
-                      ),
+                      trailing: _buildArrow(Colors.blue),
                     ),
                   ),
+
                   SizedBox(height: 2.h),
+
+                  // 2. App Theme Tile
                   SettingsTile(
                     title: "App Theme",
                     subtitle: "Light mode",
                     circleColor: Colors.blue,
                     leadingIcon: Icons.dark_mode,
-                    trailing: Switch(value: true, onChanged: (val) {}),
-                  ),
-                  SizedBox(height: 2.h),
-                  SettingsTile(
-                    title: "About Company",
-                    subtitle: "learn more about \ncompany",
-                    circleColor: Colors.purpleAccent,
-                    leadingIcon: Icons.business_outlined,
-                    trailing: Container(
-                      height: 5.h,
-                      width: 10.w,
-                      decoration: BoxDecoration(
-                        color: Colors.purpleAccent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.purpleAccent,
-                      ),
+                    trailing: Switch(
+                      value: true,
+                      onChanged: (val) {},
+                      activeColor: Colors.blue,
                     ),
                   ),
+
                   SizedBox(height: 2.h),
+
+                  // 3. Contact Us Tile
                   SettingsTile(
                     title: "Contact us",
                     subtitle: "Get help and support",
                     circleColor: Colors.orangeAccent,
                     leadingIcon: Icons.support_agent,
-                    trailing: Container(
-                      height: 5.h,
-                      width: 10.w,
-                      decoration: BoxDecoration(
-                        color: Colors.orangeAccent.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.orangeAccent,
-                      ),
+                    trailing: _buildArrow(Colors.orangeAccent),
+                  ),
+
+                  SizedBox(height: 2.h),
+
+                  // --- NEW: CONTACT ADMIN TILE ---
+                  GestureDetector(
+                    onTap: () {
+                      // Navigates to report screen with Admin type pre-selected
+                      context.pushNamed('teacherSendReportScreen', extra: {'type': 'Admin'});
+                    },
+                    child: SettingsTile(
+                      title: "Contact Admin",
+                      subtitle: "Report bugs or request features",
+                      circleColor: Colors.indigoAccent,
+                      leadingIcon: Icons.admin_panel_settings_outlined,
+                      trailing: _buildArrow(Colors.indigoAccent),
                     ),
                   ),
+
                   SizedBox(height: 2.h),
+
+                  // 4. Logout Tile
                   Consumer(
                     builder: (context, ref, child) {
                       final authVM = ref.read(authViewModelProvider.notifier);
@@ -228,20 +218,8 @@ class _TeacherSettingsState extends State<TeacherSettings>
                         subtitle: "Sign out of your account",
                         circleColor: Colors.redAccent,
                         leadingIcon: Icons.exit_to_app,
-                        trailing: Container(
-                          height: 5.h,
-                          width: 10.w,
-                          decoration: BoxDecoration(
-                            color: Colors.orangeAccent.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            Icons.arrow_forward_ios,
-                            color: Colors.orangeAccent,
-                          ),
-                        ),
+                        trailing: _buildArrow(Colors.redAccent),
                         onPressed: () async {
-                          // Step 1: Ask for confirmation
                           final confirmed = await showDialog<bool>(
                             context: context,
                             builder: (ctx) => AlertDialog(
@@ -262,24 +240,21 @@ class _TeacherSettingsState extends State<TeacherSettings>
                             ),
                           );
 
-                          // Step 2: If confirmed, call ViewModel
                           if (confirmed == true) {
                             await authVM.signOut();
-
-                            // Step 3: Show feedback to user
-                            Utils.showDelightToast(
-                              context,
-                              "User successfully logged out",
-                              duration: Duration(seconds: 3),
-                              textColor: Colors.white,
-                              bgColor: Colors.green,
-                              position: DelightSnackbarPosition.bottom,
-                              icon: Icons.check,
-                              iconColor: Colors.white,
-                            );
-
-                            // Step 4: Navigate to login page
-                            context.goNamed('login');
+                            if (context.mounted) {
+                              Utils.showDelightToast(
+                                context,
+                                "User successfully logged out",
+                                duration: const Duration(seconds: 3),
+                                textColor: Colors.white,
+                                bgColor: Colors.green,
+                                position: DelightSnackbarPosition.bottom,
+                                icon: Icons.check,
+                                iconColor: Colors.white,
+                              );
+                              context.goNamed('login');
+                            }
                           }
                         },
                       );
@@ -291,6 +266,23 @@ class _TeacherSettingsState extends State<TeacherSettings>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // Helper method to maintain consistent arrow UI
+  Widget _buildArrow(Color color) {
+    return Container(
+      height: 5.h,
+      width: 10.w,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(
+        Icons.arrow_forward_ios,
+        color: color,
+        size: 16.sp,
       ),
     );
   }

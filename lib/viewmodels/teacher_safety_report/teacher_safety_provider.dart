@@ -12,7 +12,9 @@ final teacherSafetyRepositoryProvider = Provider((ref) {
   return TeacherSafetyRepository(ref.watch(teacherSafetyServiceProvider));
 });
 
-// 3. ViewModel
-final teacherSafetyViewModelProvider = StateNotifierProvider.autoDispose<TeacherSafetyViewModel, TeacherSafetyState>((ref) {
-  return TeacherSafetyViewModel(ref.watch(teacherSafetyRepositoryProvider));
+// 3. ViewModel - Note: Removed autoDispose to prevent state loss during navigation
+// This ensures the inbox stays populated when you return from a detail screen.
+final teacherSafetyViewModelProvider = StateNotifierProvider<TeacherSafetyViewModel, TeacherSafetyState>((ref) {
+  final repo = ref.watch(teacherSafetyRepositoryProvider);
+  return TeacherSafetyViewModel(repo);
 });

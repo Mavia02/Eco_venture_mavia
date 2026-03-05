@@ -1,44 +1,81 @@
-import '../core/config/api_constants.dart';
-import '../services/api_service.dart';
-import '../services/shared_preferences_helper.dart';
-import 'dart:async';
+import 'package:eco_venture/core/config/api_constants.dart';
+import 'package:eco_venture/services/api_service.dart';
+import 'package:eco_venture/services/shared_preferences_helper.dart';
 
 class TeacherRepository {
-  TeacherRepository._();
+  // Singleton pattern to ensure we use the same instance throughout the app
+  static final TeacherRepository getInstance = TeacherRepository._internal();
+  TeacherRepository._internal();
 
-  static final TeacherRepository getInstance = TeacherRepository._();
   final ApiService _apiService = ApiService();
 
-  Future<void> addStudent(String name, String email, String password) async {
-    // 1. Get the Current Teacher's ID
-    final String? teacherId = await SharedPreferencesHelper.instance
-        .getUserId();
-
-    if (teacherId == null) {
-      throw Exception("Teacher ID not found. Please login again.");
-    }
-
-    var requestBody = {
-      'email': email,
-      'password': password,
-      'name': name,
-      'teacherId': teacherId,
-    };
-
+  /// CREATION LOGIC: Matches your backend's createStudent function.
+  /// Keys: email, password, name, teacherId, ageGroup.
+  Future<void> addStudent({
+    required String name,
+    required String email,
+    required String password,
+    required String ageGroup,
+  }) async {
     try {
-      // 2. SEND TO NODE.JS WITH 60 SECOND TIMEOUT
-      // Render Cold Start takes ~50s. We force the app to wait 60s.
-      await _apiService
-          .sendUserToken(ApiConstants.createStudentEndPoint, requestBody)
-          .timeout(const Duration(seconds: 60));
-    } on TimeoutException catch (_) {
-      // 3. BETTER ERROR MESSAGE IF IT STILL FAILS
-      throw Exception(
-        "Server is waking up... checks your student list, the account might be created.",
+      // 1. Get current teacher's UID from local storage
+      String? teacherId = await SharedPreferencesHelper.instance.getUserId();
+
+      if (teacherId == null) {
+        throw Exception("Teacher session expired. Please log in again.");
+      }
+
+      // 2. Prepare request body exactly as the backend expects it
+      final requestBody = {
+        'name': name,
+        'email': email,
+        'password': password,
+        'ageGroup': ageGroup,
+        'teacherId': teacherId, // Matches 'const { teacherId } = req.body' in Node.js
+      };
+
+      // 3. Call the backend API
+      final response = await _apiService.sendUserToken(
+        ApiConstants.createStudentEndpoint,
+        requestBody,
       );
+
+      // 4. Handle backend errors returned in the JSON response
+      if (response.containsKey('error')) {
+        throw Exception(response['error']);
+      }
     } catch (e) {
-      // 4. RETHROW OTHER ERRORS (Like "Email already exists")
-      rethrow;
+      throw Exception("Failed to register student: $e");
+    }
+  }
+
+  /// DELETION LOGIC: Matches your backend's deleteStudent function.
+  /// Key: studentId.
+  /// This performs a permanent deletion from Auth, Firestore, and Realtime DB.
+  Future<void> deleteStudent(String studentId) async {
+    try {
+      // 1. Prepare request body with the student identifier
+      final requestBody = {
+        'studentId': studentId, // Matches 'const { studentId } = req.body' in Node.js
+      };
+
+      // 2. Call the deletion endpoint
+      // Note: Ensure ApiConstants.deleteStudentEndpoint is defined in your constants file
+      final response = await _apiService.sendUserToken(
+        ApiConstants.deleteStudentEndpoint,
+        requestBody,
+      );
+
+      // 3. Check for specific backend error messages
+      if (response.containsKey('error')) {
+        throw Exception(response['error']);
+      }
+
+      // Verification log for debug mode
+      print("✅ Student $studentId permanently deleted from backend.");
+
+    } catch (e) {
+      throw Exception("Permanent deletion failed: $e");
     }
   }
 }

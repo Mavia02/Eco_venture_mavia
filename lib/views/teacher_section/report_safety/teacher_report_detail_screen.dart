@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart'; // Import GoRouter
-import '../../../../models/teacher_report_model.dart';
+import 'package:go_router/go_router.dart';
+import '../../../models/teacher_report_model.dart';
 import '../../../viewmodels/teacher_safety_report/teacher_safety_provider.dart';
-
 
 class TeacherReportDetailScreen extends ConsumerWidget {
   final TeacherReportModel reportData;
@@ -15,112 +14,138 @@ class TeacherReportDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final Color _bg = const Color(0xFFF4F7FE);
     final Color _textDark = const Color(0xFF1B2559);
+    final Color _primaryBlue = const Color(0xFF4E54C8);
 
-    // Logic to check if content is attached (ID or specific title)
-    final bool isContentReport = reportData.contentId != null ||
-        (reportData.title != 'Alert' && !reportData.title.contains('Behavior'));
+    // Logic: Determine if this is a content-related alert or a generic one
+    final bool isContentReport = reportData.contentId != null && reportData.contentId!.isNotEmpty;
+    final bool isPending = reportData.status.toLowerCase().contains('pending');
 
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        title: Text("Report Details", style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18.sp)),
+        title: Text(
+            "Report Details",
+            style: GoogleFonts.poppins(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18.sp)
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20),
           onPressed: () => context.pop(),
         ),
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(5.w),
+        padding: EdgeInsets.all(6.w),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- HEADER ---
+            // --- HEADER CARD ---
             Container(
-              padding: EdgeInsets.all(4.w),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+              padding: EdgeInsets.all(5.w),
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)]
+              ),
               child: Row(
                 children: [
-                  CircleAvatar(radius: 20.sp, backgroundColor: Colors.red.shade50, child: const Icon(Icons.warning_amber_rounded, color: Colors.red)),
-                  SizedBox(width: 3.w),
+                  CircleAvatar(
+                      radius: 22.sp,
+                      backgroundColor: (isPending ? Colors.orange : Colors.green).withOpacity(0.1),
+                      child: Icon(
+                          isPending ? Icons.pending_actions_rounded : Icons.check_circle_rounded,
+                          color: isPending ? Colors.orange : Colors.green
+                      )
+                  ),
+                  SizedBox(width: 4.w),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(reportData.title, style: GoogleFonts.poppins(fontSize: 16.sp, fontWeight: FontWeight.bold, color: _textDark)),
-                        Text(reportData.fromName, style: GoogleFonts.poppins(fontSize: 12.sp, color: Colors.grey)),
+                        Text("From: ${reportData.fromName}", style: GoogleFonts.poppins(fontSize: 13.sp, color: Colors.grey)),
                       ],
                     ),
                   ),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 2.w, vertical: 0.4.h),
-                    decoration: BoxDecoration(color: reportData.status == 'Pending' ? Colors.orange.withOpacity(0.1) : Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                    child: Text(reportData.status, style: TextStyle(color: reportData.status == 'Pending' ? Colors.orange : Colors.green, fontWeight: FontWeight.bold, fontSize: 10.sp)),
-                  )
                 ],
               ),
             ),
-            SizedBox(height: 3.h),
+            SizedBox(height: 4.h),
 
-            // --- REPORTED CONTENT (If applicable) ---
+            // --- CONTEXT SECTION ---
             if (isContentReport) ...[
-              Text("Report Context", style: GoogleFonts.poppins(fontSize: 14.sp, fontWeight: FontWeight.bold, color: _textDark)),
-              SizedBox(height: 1.5.h),
+              _buildSectionLabel("Reported Item"),
               Container(
-                padding: EdgeInsets.all(3.w),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.red.withOpacity(0.3))),
+                margin: EdgeInsets.only(top: 1.h, bottom: 3.h),
+                padding: EdgeInsets.all(4.w),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.red.withOpacity(0.1))
+                ),
                 child: Row(
                   children: [
-                    Container(height: 60, width: 60, color: Colors.grey.shade200, child: const Icon(Icons.play_circle_outline)),
+                    const Icon(Icons.link_rounded, color: Colors.red),
                     SizedBox(width: 3.w),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(reportData.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.sp)),
-                          if(reportData.contentId != null) Text("ID: ${reportData.contentId}", style: TextStyle(color: Colors.grey, fontSize: 10.sp)),
-                        ],
-                      ),
-                    ),
+                    Text("Content ID: ${reportData.contentId}", style: GoogleFonts.poppins(fontSize: 14.sp, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
-              SizedBox(height: 3.h),
             ],
 
-            // --- FULL DETAILS ---
-            Text("Full Description", style: GoogleFonts.poppins(fontSize: 14.sp, fontWeight: FontWeight.bold, color: _textDark)),
+            // --- DESCRIPTION ---
+            _buildSectionLabel("Message Content"),
             SizedBox(height: 1.h),
             Container(
               width: double.infinity,
-              padding: EdgeInsets.all(4.w),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+              padding: EdgeInsets.all(5.w),
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey.shade100)
+              ),
               child: Text(
-                reportData.description.isEmpty ? "No detailed description provided." : reportData.description,
-                style: GoogleFonts.poppins(fontSize: 13.sp, color: Colors.grey[800], height: 1.5),
+                reportData.description.isEmpty ? "No additional details provided." : reportData.description,
+                style: GoogleFonts.poppins(fontSize: 14.sp, color: Colors.grey[800], height: 1.6),
               ),
             ),
 
-            SizedBox(height: 5.h),
+            SizedBox(height: 6.h),
 
-            // --- ACTIONS ---
-            if (reportData.status == 'Pending')
+            // --- RESOLUTION ACTION ---
+            if (isPending)
               SizedBox(
                 width: double.infinity,
-                height: 7.h,
-                child: ElevatedButton(
-                  onPressed: () {
-                    ref.read(teacherSafetyViewModelProvider.notifier).markResolved(reportData.id, reportData.childId);
-                    context.pop();
+                height: 7.5.h,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.done_all_rounded, color: Colors.white),
+                  label: Text(
+                      "MARK AS RESOLVED",
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.bold, letterSpacing: 1, color: Colors.white)
+                  ),
+                  onPressed: () async {
+                    // Logic: Now correctly calling the newly added ViewModel method
+                    await ref.read(teacherSafetyViewModelProvider.notifier).markResolved(reportData.id, reportData.childId);
+                    if (context.mounted) context.pop();
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: const Text("Mark as Resolved", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      elevation: 4
+                  ),
                 ),
               ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSectionLabel(String text) {
+    return Text(
+        text,
+        style: GoogleFonts.poppins(fontSize: 14.sp, fontWeight: FontWeight.bold, color: const Color(0xFFA3AED0))
     );
   }
 }

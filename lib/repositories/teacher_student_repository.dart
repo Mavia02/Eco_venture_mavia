@@ -8,29 +8,50 @@ class TeacherStudentRepository {
 
   Stream<TeacherStudentDetailModel> getStudentDetail(String studentId) {
     return _service.getStudentDetailStream(studentId).map((data) {
+      // Helper to safely convert dynamic values to int
+      int toInt(dynamic value) {
+        if (value == null) return 0;
+        if (value is int) return value;
+        if (value is double) return value.toInt();
+        return int.tryParse(value.toString()) ?? 0;
+      }
+
       return TeacherStudentDetailModel(
-        studentId: data['studentId'],
-        name: data['name'],
-        email: data['email'],
-        totalXP: data['totalXP'],
-        currentLevel: data['currentLevel'],
-        quizzesPassed: data['quizCount'],
-        stemSubmitted: data['stemSub'],
-        stemApproved: data['stemApp'],
-        qrHuntsCompleted: data['qrCount'],
-        recentActivity: data['activity'],
+        studentId: studentId,
+        name: data['name'] ?? data['displayName'] ?? "Unknown Explorer",
+        email: data['email'] ?? "",
+
+        // --- FIXED: Robust ageGroup extraction ---
+        // This ensures the detail screen matches the home screen sorting
+        ageGroup: data['ageGroup'] ?? data['age_group'] ?? "6 - 8",
+
+        // --- SAFETY: Using toInt helper to prevent type crashes ---
+        totalXP: toInt(data['totalXP'] ?? data['xp']),
+        currentLevel: toInt(data['currentLevel'] ?? data['level'] ?? 1),
+        quizzesPassed: toInt(data['quizCount'] ?? data['quizzesPassed']),
+        stemSubmitted: toInt(data['stemSub'] ?? data['stemSubmitted']),
+        stemApproved: toInt(data['stemApp'] ?? data['stemApproved']),
+        qrHuntsCompleted: toInt(data['qrCount'] ?? data['qrHuntsCompleted']),
+
+        recentActivity: List<Map<String, dynamic>>.from(data['activity'] ?? []),
       );
     });
   }
 
-  // --- NEW: Expose Review Logic ---
-  Future<void> reviewSubmission(String studentId, String challengeId, String status, int points, String feedback) async {
+  // --- Action to Review STEM ---
+  Future<void> reviewSubmission({
+    required String studentId,
+    required String challengeId,
+    required String status,
+    required int points,
+    required String feedback,
+  }) async {
     await _service.reviewStemSubmission(
-        studentId: studentId,
-        challengeId: challengeId,
-        status: status,
-        points: points,
-        feedback: feedback
+      studentId: studentId,
+      challengeId: challengeId,
+      status: status,
+      points: points,
+      feedback: feedback,
     );
   }
 }

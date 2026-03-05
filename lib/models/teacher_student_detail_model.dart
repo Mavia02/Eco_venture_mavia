@@ -2,6 +2,7 @@ class TeacherStudentDetailModel {
   final String studentId;
   final String name;
   final String email;
+  final String ageGroup; // Added for age-based classification
   final int totalXP;
   final int currentLevel;
 
@@ -18,6 +19,7 @@ class TeacherStudentDetailModel {
     required this.studentId,
     required this.name,
     required this.email,
+    required this.ageGroup, // Now required in constructor
     this.totalXP = 0,
     this.currentLevel = 1,
     this.quizzesPassed = 0,
@@ -31,6 +33,7 @@ class TeacherStudentDetailModel {
     String? studentId,
     String? name,
     String? email,
+    String? ageGroup, // Included in copyWith
     int? totalXP,
     int? currentLevel,
     int? quizzesPassed,
@@ -43,6 +46,7 @@ class TeacherStudentDetailModel {
       studentId: studentId ?? this.studentId,
       name: name ?? this.name,
       email: email ?? this.email,
+      ageGroup: ageGroup ?? this.ageGroup, // Updated logic
       totalXP: totalXP ?? this.totalXP,
       currentLevel: currentLevel ?? this.currentLevel,
       quizzesPassed: quizzesPassed ?? this.quizzesPassed,

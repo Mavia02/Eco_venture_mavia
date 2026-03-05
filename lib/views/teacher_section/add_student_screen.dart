@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // 1. Riverpod
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
 
@@ -17,6 +17,10 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  // --- UPDATED: Individual Year Selection ---
+  String? _selectedYear;
+  final List<String> _individualYears = ["6", "7", "8", "9", "10", "11", "12"];
+
   // --- PRO COLORS ---
   final Color _primary = const Color(0xFF1565C0); // Teacher Blue
   final Color _bg = const Color(0xFFF4F7FE);
@@ -32,36 +36,52 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
     super.dispose();
   }
 
+  // Logic: Map the individual year selection to the broad backend classes
+  String _mapYearToClass(String year) {
+    int age = int.parse(year);
+    if (age >= 6 && age <= 8) {
+      return "6 - 8";
+    } else if (age >= 9 && age <= 10) {
+      return "8 - 10";
+    } else if (age >= 11 && age <= 12) {
+      return "10 - 12";
+    }
+    return "6 - 8"; // Default fallback
+  }
+
   Future<void> _registerStudent() async {
-    // 1. Validation
+    // 1. Validation including Age selection
     if (_nameController.text.trim().isEmpty ||
         _emailController.text.trim().isEmpty ||
-        _passwordController.text.trim().isEmpty) {
+        _passwordController.text.trim().isEmpty ||
+        _selectedYear == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please fill all fields"),
+          content: Text("Please fill all fields and select the student's age"),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
-    // 2. Call ViewModel (Real Backend Logic)
+    // 2. Perform Mapping: Year -> Class Range
+    String mappedAgeGroup = _mapYearToClass(_selectedYear!);
+
+    // 3. Call ViewModel with the Mapped Age Group
     await ref
         .read(teacherAuthViewModelProvider.notifier)
         .addStudent(
-          name: _nameController.text.trim(),
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
-        );
+      name: _nameController.text.trim(),
+      email: _emailController.text.trim(),
+      password: _passwordController.text.trim(),
+      ageGroup: mappedAgeGroup, // Pass the category string to backend
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // 3. Watch State for Loading
     final authState = ref.watch(teacherAuthViewModelProvider);
 
-    // 4. Listen for Side Effects (Success/Error)
     ref.listen(teacherAuthViewModelProvider, (previous, next) {
       if (next.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -107,7 +127,6 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Card
             Container(
               padding: EdgeInsets.all(5.w),
               decoration: BoxDecoration(
@@ -152,7 +171,7 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
                         ),
                         SizedBox(height: 0.5.h),
                         Text(
-                          "Add a new learner to your class roster.",
+                          "Select the student's exact age.",
                           style: GoogleFonts.poppins(
                             fontSize: 14.sp,
                             color: Colors.white.withOpacity(0.9),
@@ -166,7 +185,6 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
             ),
             SizedBox(height: 4.h),
 
-            // Form Fields
             Container(
               padding: EdgeInsets.all(6.w),
               decoration: BoxDecoration(
@@ -192,6 +210,11 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
                   ),
                   SizedBox(height: 3.h),
 
+                  _buildLabel("Age (Years)"),
+                  SizedBox(height: 1.5.h),
+                  _buildAgeDropdown(),
+                  SizedBox(height: 3.h),
+
                   _buildLabel("Email Address"),
                   SizedBox(height: 1.5.h),
                   _buildTextField(
@@ -215,7 +238,6 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
 
             SizedBox(height: 5.h),
 
-            // Submit Button
             SizedBox(
               width: double.infinity,
               height: 7.5.h,
@@ -232,13 +254,13 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
                 child: authState.isLoading
                     ? const CircularProgressIndicator(color: Colors.white)
                     : Text(
-                        "Register Student",
-                        style: GoogleFonts.poppins(
-                          fontSize: 16.sp,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
+                  "Register Student",
+                  style: GoogleFonts.poppins(
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
               ),
             ),
             SizedBox(height: 2.h),
@@ -255,6 +277,44 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
         fontSize: 14.sp,
         fontWeight: FontWeight.w600,
         color: _textDark,
+      ),
+    );
+  }
+
+  Widget _buildAgeDropdown() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 4.w),
+      decoration: BoxDecoration(
+        color: _bg,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButtonFormField<String>(
+          value: _selectedYear,
+          hint: Text(
+            "Select Age",
+            style: GoogleFonts.poppins(color: _textGrey, fontSize: 14.sp),
+          ),
+          decoration: const InputDecoration(border: InputBorder.none),
+          items: _individualYears.map((String value) {
+            return DropdownMenuItem<String>(
+              value: value,
+              child: Text(
+                "$value Years Old",
+                style: GoogleFonts.poppins(
+                  fontSize: 15.sp,
+                  color: _textDark,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            );
+          }).toList(),
+          onChanged: (newValue) {
+            setState(() {
+              _selectedYear = newValue;
+            });
+          },
+        ),
       ),
     );
   }

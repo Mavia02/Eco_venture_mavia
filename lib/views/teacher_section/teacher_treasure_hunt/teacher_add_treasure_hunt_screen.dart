@@ -11,6 +11,7 @@ import '../../../../models/qr_hunt_model.dart';
 import '../../../core/config/api_constants.dart';
 import '../../../services/shared_preferences_helper.dart';
 import '../../../viewmodels/teacher_qr_treasure/teacher_treasure_hunt_provider.dart';
+
 class TeacherAddTreasureHuntScreen extends ConsumerStatefulWidget {
   const TeacherAddTreasureHuntScreen({super.key});
 
@@ -27,28 +28,49 @@ class _TeacherAddTreasureHuntScreenState
   String _difficulty = 'Easy';
   final List<String> _difficultyLevels = ['Easy', 'Medium', 'Hard'];
 
+  // --- NEW: Age Selection State ---
+  String? _selectedYear;
+  final List<String> _individualYears = ["6", "7", "8", "9", "10", "11", "12"];
+
   final List<TextEditingController> _clueControllers = [
     TextEditingController(),
     TextEditingController()
   ];
 
-  // Generate a unique ID for this hunt session immediately
-  // This ensures QRs match what we save to Firebase later
   final String _tempHuntId = DateTime.now().millisecondsSinceEpoch.toString();
-  // --- TAGS & SENSITIVITY ---
   final TextEditingController _tagsController = TextEditingController();
   bool _isSensitive = false;
 
-  // --- COLORS ---
   final Color _primary = const Color(0xFF00C853);
   final Color _bg = const Color(0xFFF4F7FE);
   final Color _textDark = const Color(0xFF1B2559);
   final Color _border = const Color(0xFFE0E0E0);
 
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _pointsController.dispose();
+    _tagsController.dispose();
+    for (var controller in _clueControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  // Logic: Map the individual year selection to the broad backend classes
+  String _mapYearToClass(String year) {
+    int age = int.parse(year);
+    if (age >= 6 && age <= 8) return "6 - 8";
+    if (age >= 9 && age <= 10) return "8 - 10";
+    if (age >= 11 && age <= 12) return "10 - 12";
+    return "6 - 8";
+  }
+
   // --- NOTIFICATION LOGIC ---
   Future<void> _sendClassNotification(
       String teacherId,
       String huntTitle,
+      String ageGroup,
       ) async {
     const String backendUrl = ApiConstants.notifyChildClassEndPoints;
 
@@ -60,15 +82,13 @@ class _TeacherAddTreasureHuntScreenState
           "teacherId": teacherId,
           "type": "QR Hunt",
           "title": "New Treasure Hunt: $huntTitle 🗺️",
-          "body":
-          "Your teacher created a new QR treasure hunt: $huntTitle. Start exploring!",
+          "body": "A new treasure hunt for Group $ageGroup is ready! Start exploring!",
+          "ageGroup": ageGroup,
         }),
       );
 
       if (response.statusCode == 200) {
         print("✅ QR Hunt Notification sent successfully");
-      } else {
-        print("❌ Notification failed: ${response.body}");
       }
     } catch (e) {
       print("❌ Error calling notification backend: $e");
@@ -77,9 +97,9 @@ class _TeacherAddTreasureHuntScreenState
 
   // --- 1. SAVE LOGIC ---
   Future<void> _saveHunt() async {
-    if (_titleController.text.isEmpty || _pointsController.text.isEmpty) {
+    if (_titleController.text.isEmpty || _pointsController.text.isEmpty || _selectedYear == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Please fill all fields"),
+          content: Text("Please fill all fields including Target Age"),
           backgroundColor: Colors.red));
       return;
     }
@@ -94,13 +114,16 @@ class _TeacherAddTreasureHuntScreenState
           backgroundColor: Colors.red));
       return;
     }
+
+    // Process Mapping
+    String mappedAgeGroup = _mapYearToClass(_selectedYear!);
+
     List<String> tagsList = _tagsController.text
         .split(',')
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList();
 
-    // --- SENSITIVITY CONTROL ---
     if (_isSensitive && !tagsList.contains('scary')) {
       tagsList.add('scary');
     }
@@ -108,7 +131,6 @@ class _TeacherAddTreasureHuntScreenState
       tagsList.remove('scary');
     }
 
-    // Get teacher ID for notification
     String? teacherId = await SharedPreferencesHelper.instance.getUserId();
     if (teacherId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -127,17 +149,15 @@ class _TeacherAddTreasureHuntScreenState
       adminId: teacherId,
       tags: tagsList,
       isSensitive: _isSensitive,
+      ageGroup: mappedAgeGroup, // Pass mapped classification to model
     );
 
-    // Pass 'null' for image file because we aren't uploading a single QR image anymore.
-    // The QRs are generated dynamically.
     await ref
         .read(teacherTreasureHuntViewModelProvider.notifier)
         .addHunt(newHunt, null);
 
-    // Send notification only if not sensitive
     if (!_isSensitive) {
-      await _sendClassNotification(teacherId, newHunt.title);
+      await _sendClassNotification(teacherId, newHunt.title, mappedAgeGroup);
     }
   }
 
@@ -154,14 +174,8 @@ class _TeacherAddTreasureHuntScreenState
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async {
           final doc = pw.Document();
-
-          // Loop through clues to create a unique QR for each
           for (int i = 0; i < _clueControllers.length; i++) {
-            // Logic: "HUNT_ID : CLUE_INDEX"
-            // Example: "17382912_0", "17382912_1"
-            // The Child App will scan this string to verify the step.
             final qrData = "${_tempHuntId}_$i";
-
             doc.addPage(
               pw.Page(
                 pageFormat: format,
@@ -179,15 +193,12 @@ class _TeacherAddTreasureHuntScreenState
                             style: pw.TextStyle(
                                 fontSize: 20, color: PdfColors.grey700)),
                         pw.SizedBox(height: 40),
-
-                        // Generate QR
                         pw.BarcodeWidget(
                           barcode: pw.Barcode.qrCode(),
                           data: qrData,
                           width: 300,
                           height: 300,
                         ),
-
                         pw.SizedBox(height: 40),
                         pw.Text("Hide this QR code at location #${i + 1}",
                             style: pw.TextStyle(fontSize: 18)),
@@ -207,7 +218,6 @@ class _TeacherAddTreasureHuntScreenState
         },
       );
     } catch (e) {
-      print("Print Error: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text("Error generating PDF: $e"),
@@ -222,7 +232,6 @@ class _TeacherAddTreasureHuntScreenState
 
     ref.listen(teacherTreasureHuntViewModelProvider, (prev, next) {
       if (next.isSuccess) {
-        // Updated success message to include notification info
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(_isSensitive
               ? "QR Hunt Created! (No notification sent - marked sensitive)"
@@ -245,8 +254,7 @@ class _TeacherAddTreasureHuntScreenState
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon:
-          Icon(Icons.arrow_back, color: Colors.black, size: 20.sp),
+          icon: Icon(Icons.arrow_back, color: Colors.black, size: 20.sp),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text("Add QR Hunt",
@@ -271,6 +279,12 @@ class _TeacherAddTreasureHuntScreenState
             _buildTextField(_titleController, "Enter task title"),
 
             SizedBox(height: 2.h),
+
+            // --- NEW: Target Age Field ---
+            _buildLabel("Target Age (Years)"),
+            _buildAgeDropdown(),
+            SizedBox(height: 2.h),
+
             _buildLabel("Points"),
             _buildTextField(_pointsController, "e.g., 100",
                 isNumber: true),
@@ -373,7 +387,6 @@ class _TeacherAddTreasureHuntScreenState
 
             SizedBox(height: 4.h),
 
-            // --- QR GENERATOR BUTTON ---
             Container(
               padding: EdgeInsets.all(4.w),
               decoration: BoxDecoration(
@@ -418,7 +431,6 @@ class _TeacherAddTreasureHuntScreenState
 
             SizedBox(height: 4.h),
 
-            // --- SAVE BUTTON ---
             SizedBox(
               width: double.infinity,
               height: 7.h,
@@ -443,6 +455,30 @@ class _TeacherAddTreasureHuntScreenState
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAgeDropdown() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 4.w),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _border)),
+      child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: _selectedYear,
+            isExpanded: true,
+            hint: Text("Select Age", style: GoogleFonts.poppins(fontSize: 15.sp, color: Colors.grey)),
+            items: _individualYears
+                .map((y) => DropdownMenuItem(
+              value: y,
+              child: Text("$y Years Old",
+                  style: GoogleFonts.poppins(fontSize: 15.sp)),
+            ))
+                .toList(),
+            onChanged: (v) => setState(() => _selectedYear = v!),
+          )),
     );
   }
 

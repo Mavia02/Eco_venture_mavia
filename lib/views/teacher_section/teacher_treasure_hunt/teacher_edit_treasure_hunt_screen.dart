@@ -1,5 +1,5 @@
 import 'dart:convert';
-
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -26,8 +26,6 @@ class _TeacherEditTreasureHuntScreenState
     extends ConsumerState<TeacherEditTreasureHuntScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _pointsController = TextEditingController();
-
-  // --- ADDED: Tags Controller ---
   final TextEditingController _tagsController = TextEditingController();
 
   late QrHuntModel _hunt;
@@ -35,7 +33,10 @@ class _TeacherEditTreasureHuntScreenState
   final List<String> _difficultyLevels = ['Easy', 'Medium', 'Hard'];
   final List<TextEditingController> _clueControllers = [];
 
-  // --- ADDED: Sensitivity Flag ---
+  // --- NEW: Age Selection State ---
+  String? _selectedYear;
+  final List<String> _individualYears = ["6", "7", "8", "9", "10", "11", "12"];
+
   bool _isSensitive = false;
 
   final Color _primary = const Color(0xFF00C853);
@@ -46,7 +47,7 @@ class _TeacherEditTreasureHuntScreenState
   @override
   void initState() {
     super.initState();
-    // Parse Data
+    // 1. Parse Data
     if (widget.huntData is QrHuntModel) {
       _hunt = widget.huntData;
     } else {
@@ -61,26 +62,65 @@ class _TeacherEditTreasureHuntScreenState
         clues: List<String>.from(map['clues'] ?? []),
         createdAt: DateTime.now(),
         tags: List<String>.from(map['tags'] ?? []),
-        // ADDED: Load tags
-        isSensitive: map['isSensitive'] ?? false, // ADDED: Load sensitivity
+        isSensitive: map['isSensitive'] ?? false,
+        // --- NEW: Load classification ---
+        ageGroup: map['ageGroup'] ?? '6 - 8',
       );
     }
 
+    // 2. Initialize Controllers
     _titleController.text = _hunt.title;
     _pointsController.text = _hunt.points.toString();
     _difficulty = _hunt.difficulty;
-
-    // --- ADDED: Initialize tags and sensitivity ---
-    _tagsController.text = _hunt.tags?.join(', ') ?? '';
-    _isSensitive = _hunt.isSensitive ?? false;
+    _tagsController.text = _hunt.tags.join(', ');
+    _isSensitive = _hunt.isSensitive;
 
     for (var clue in _hunt.clues) {
       _clueControllers.add(TextEditingController(text: clue));
     }
+
+    // --- NEW: Initialize selected year based on existing ageGroup range ---
+    if (_hunt.ageGroup == "6 - 8") {
+      _selectedYear = "6";
+    } else if (_hunt.ageGroup == "8 - 10") {
+      _selectedYear = "9";
+    } else if (_hunt.ageGroup == "10 - 12") {
+      _selectedYear = "11";
+    } else {
+      _selectedYear = "6"; // Default fallback
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _pointsController.dispose();
+    _tagsController.dispose();
+    for (var controller in _clueControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  // Logic: Map individual year selection to broad backend ranges
+  String _mapYearToClass(String year) {
+    int age = int.parse(year);
+    if (age >= 6 && age <= 8) return "6 - 8";
+    if (age >= 9 && age <= 10) return "8 - 10";
+    if (age >= 11 && age <= 12) return "10 - 12";
+    return "6 - 8";
   }
 
   Future<void> _updateHunt() async {
-    if (_titleController.text.isEmpty) return;
+    if (_titleController.text.isEmpty || _selectedYear == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Title and Target Age are required")),
+      );
+      return;
+    }
+
+    // Perform mapping for assignment logic
+    String mappedAgeGroup = _mapYearToClass(_selectedYear!);
 
     List<String> clues = _clueControllers
         .where((c) => c.text.isNotEmpty)
@@ -93,14 +133,9 @@ class _TeacherEditTreasureHuntScreenState
         .where((e) => e.isNotEmpty)
         .toList();
 
-    if (_isSensitive && !tagsList.contains('scary')) {
-      tagsList.add('scary');
-    }
-    if (!_isSensitive) {
-      tagsList.remove('scary');
-    }
+    if (_isSensitive && !tagsList.contains('scary')) tagsList.add('scary');
+    if (!_isSensitive) tagsList.remove('scary');
 
-    // --- GET TEACHER ID FOR NOTIFICATION ---
     String? teacherId = await SharedPreferencesHelper.instance.getUserId();
     if (teacherId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -119,6 +154,7 @@ class _TeacherEditTreasureHuntScreenState
       clues: clues,
       tags: tagsList,
       isSensitive: _isSensitive,
+      ageGroup: mappedAgeGroup, // Pass updated classification
     );
 
     // Update in Firebase
@@ -126,39 +162,33 @@ class _TeacherEditTreasureHuntScreenState
         .read(teacherTreasureHuntViewModelProvider.notifier)
         .updateHunt(updatedHunt, null);
 
-    // --- SEND NOTIFICATION ONLY IF NOT SENSITIVE ---
+    // Send notification targeting specific group
     if (!_isSensitive) {
-      await _sendClassNotification(teacherId, updatedHunt.title);
+      await _sendClassNotification(teacherId, updatedHunt.title, mappedAgeGroup);
     }
   }
 
-  // --- NOTIFICATION LOGIC ---
   Future<void> _sendClassNotification(
-    String teacherId,
-    String huntTitle,
-  ) async {
+      String teacherId,
+      String huntTitle,
+      String ageGroup,
+      ) async {
     const String backendUrl = ApiConstants.notifyChildClassEndPoints;
 
     try {
-      final response = await http.post(
+      await http.post(
         Uri.parse(backendUrl),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "teacherId": teacherId,
           "type": "QR Hunt",
           "title": "QR Hunt Updated: $huntTitle ✏️",
-          "body":
-              "Your teacher updated the treasure hunt: $huntTitle. Check it out!",
+          "body": "The treasure hunt for Group $ageGroup has been updated. Check it out!",
+          "ageGroup": ageGroup,
         }),
       );
-
-      if (response.statusCode == 200) {
-        print("✅ QR Hunt Update Notification sent successfully");
-      } else {
-        print("❌ Notification failed: ${response.body}");
-      }
     } catch (e) {
-      print("❌ Error calling notification backend: $e");
+      debugPrint("❌ Notification Error: $e");
     }
   }
 
@@ -169,9 +199,7 @@ class _TeacherEditTreasureHuntScreenState
       onLayout: (PdfPageFormat format) async {
         final doc = pw.Document();
         for (int i = 0; i < _clueControllers.length; i++) {
-          // Ensure we use the SAME ID so previous codes don't break if not changed
           final qrData = "${_hunt.id}_$i";
-
           doc.addPage(
             pw.Page(
               pageFormat: format,
@@ -269,13 +297,18 @@ class _TeacherEditTreasureHuntScreenState
                 _buildLabel("Task Name"),
                 _buildTextField(_titleController, "Title"),
                 SizedBox(height: 2.h),
+
+                // --- NEW: Target Age Field ---
+                _buildLabel("Target Age (Years)"),
+                _buildAgeDropdown(),
+                SizedBox(height: 2.h),
+
                 _buildLabel("Points"),
                 _buildTextField(_pointsController, "100", isNumber: true),
                 SizedBox(height: 2.h),
                 _buildLabel("Difficulty"),
                 _buildDropdown(),
 
-                // --- ADDED: Tags Field (same as Add Screen) ---
                 SizedBox(height: 2.h),
                 _buildLabel("Tags (comma-separated)"),
                 _buildTextField(
@@ -283,9 +316,9 @@ class _TeacherEditTreasureHuntScreenState
                   "e.g. outdoor, mystery, night",
                 ),
 
-                // --- ADDED: Sensitivity Switch (same as Add Screen) ---
                 SizedBox(height: 2.h),
                 SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
                   title: Text(
                     "Mark as Sensitive Content",
                     style: GoogleFonts.poppins(
@@ -331,7 +364,7 @@ class _TeacherEditTreasureHuntScreenState
                               ),
                               InkWell(
                                 onTap: () => setState(
-                                  () => _clueControllers.removeAt(index),
+                                      () => _clueControllers.removeAt(index),
                                 ),
                                 child: Icon(
                                   Icons.delete,
@@ -355,7 +388,7 @@ class _TeacherEditTreasureHuntScreenState
 
                 InkWell(
                   onTap: () => setState(
-                    () => _clueControllers.add(TextEditingController()),
+                        () => _clueControllers.add(TextEditingController()),
                   ),
                   child: Container(
                     width: double.infinity,
@@ -388,7 +421,6 @@ class _TeacherEditTreasureHuntScreenState
 
                 SizedBox(height: 4.h),
 
-                // Reprint Option
                 SizedBox(
                   width: double.infinity,
                   height: 6.h,
@@ -414,7 +446,6 @@ class _TeacherEditTreasureHuntScreenState
 
                 SizedBox(height: 3.h),
 
-                // Update Button
                 SizedBox(
                   width: double.infinity,
                   height: 7.h,
@@ -427,15 +458,15 @@ class _TeacherEditTreasureHuntScreenState
                       ),
                     ),
                     child: state.isLoading
-                        ? CircularProgressIndicator(color: Colors.white)
+                        ? const CircularProgressIndicator(color: Colors.white)
                         : Text(
-                            "Update Checkpoint",
-                            style: GoogleFonts.poppins(
-                              fontSize: 16.sp,
-                              fontWeight: FontWeight.bold,
-                              color: _textDark,
-                            ),
-                          ),
+                      "Update Checkpoint",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.bold,
+                        color: _textDark,
+                      ),
+                    ),
                   ),
                 ),
                 SizedBox(height: 3.h),
@@ -445,9 +476,40 @@ class _TeacherEditTreasureHuntScreenState
           if (state.isLoading)
             Container(
               color: Colors.black12,
-              child: Center(child: CircularProgressIndicator()),
+              child: const Center(child: CircularProgressIndicator()),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAgeDropdown() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 4.w),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedYear,
+          isExpanded: true,
+          hint: Text(
+            "Select Age",
+            style: GoogleFonts.poppins(fontSize: 15.sp, color: Colors.grey),
+          ),
+          items: _individualYears
+              .map(
+                (y) => DropdownMenuItem(
+              value: y,
+              child: Text("$y Years Old",
+                  style: GoogleFonts.poppins(fontSize: 15.sp)),
+            ),
+          )
+              .toList(),
+          onChanged: (v) => setState(() => _selectedYear = v!),
+        ),
       ),
     );
   }
@@ -472,11 +534,11 @@ class _TeacherEditTreasureHuntScreenState
     ),
   );
   Widget _buildTextField(
-    TextEditingController ctrl,
-    String hint, {
-    bool isNumber = false,
-    int maxLines = 1,
-  }) => TextField(
+      TextEditingController ctrl,
+      String hint, {
+        bool isNumber = false,
+        int maxLines = 1,
+      }) => TextField(
     controller: ctrl,
     keyboardType: isNumber ? TextInputType.number : TextInputType.text,
     maxLines: maxLines,
@@ -505,10 +567,10 @@ class _TeacherEditTreasureHuntScreenState
         items: _difficultyLevels
             .map(
               (c) => DropdownMenuItem(
-                value: c,
-                child: Text(c, style: GoogleFonts.poppins(fontSize: 15.sp)),
-              ),
-            )
+            value: c,
+            child: Text(c, style: GoogleFonts.poppins(fontSize: 15.sp)),
+          ),
+        )
             .toList(),
         onChanged: (v) => setState(() => _difficulty = v!),
       ),

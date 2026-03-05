@@ -1,16 +1,16 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
+
 import '../../../../models/video_model.dart';
 import '../../../core/config/api_constants.dart';
 import '../../../services/shared_preferences_helper.dart';
 import '../../../viewmodels/multimedia_content/teacher_multimedia_provider.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-
 
 class TeacherEditVideoScreen extends ConsumerStatefulWidget {
   final VideoModel videoData;
@@ -36,6 +36,10 @@ class _TeacherEditVideoScreenState
   String _selectedCategory = 'Science';
   final List<String> _categories = ['Science', 'Maths', 'History', 'Ecosystem'];
 
+  // --- NEW: Age Selection State ---
+  String? _selectedYear;
+  final List<String> _individualYears = ["6", "7", "8", "9", "10", "11", "12"];
+
   File? _newVideoFile;
   File? _newThumbnail;
   String? _existingThumbnailUrl;
@@ -51,9 +55,21 @@ class _TeacherEditVideoScreenState
     _existingThumbnailUrl = widget.videoData.thumbnailUrl;
     _existingVideoUrl = widget.videoData.videoUrl;
     _tagsController.text = widget.videoData.tags.join(", ");
-    _isSensitive = widget.videoData.tags.contains('scary');
+    _isSensitive = widget.videoData.isSensitive;
+
     if (_categories.contains(widget.videoData.category)) {
       _selectedCategory = widget.videoData.category;
+    }
+
+    // --- NEW: Initialize selected year based on existing ageGroup range ---
+    if (widget.videoData.ageGroup == "6 - 8") {
+      _selectedYear = "6";
+    } else if (widget.videoData.ageGroup == "8 - 10") {
+      _selectedYear = "9";
+    } else if (widget.videoData.ageGroup == "10 - 12") {
+      _selectedYear = "11";
+    } else {
+      _selectedYear = "6";
     }
   }
 
@@ -66,10 +82,20 @@ class _TeacherEditVideoScreenState
     super.dispose();
   }
 
+  // Logic: Map individual year selection to broad backend ranges
+  String _mapYearToClass(String year) {
+    int age = int.parse(year);
+    if (age >= 6 && age <= 8) return "6 - 8";
+    if (age >= 9 && age <= 10) return "8 - 10";
+    if (age >= 11 && age <= 12) return "10 - 12";
+    return "6 - 8";
+  }
+
   // --- NOTIFICATION LOGIC ---
   Future<void> _sendClassNotification(
       String teacherId,
       String videoTitle,
+      String ageGroup,
       ) async {
     const String backendUrl = ApiConstants.notifyChildClassEndPoints;
 
@@ -81,14 +107,13 @@ class _TeacherEditVideoScreenState
           "teacherId": teacherId,
           "type": "Video",
           "title": "Video Updated: $videoTitle ✏️",
-          "body": "Your teacher updated the video: $videoTitle. Check it out!",
+          "body": "The video for Group $ageGroup has been updated. Check it out!",
+          "ageGroup": ageGroup,
         }),
       );
 
       if (response.statusCode == 200) {
         print("✅ Video Update Notification sent successfully");
-      } else {
-        print("❌ Notification failed: ${response.body}");
       }
     } catch (e) {
       print("❌ Error calling notification backend: $e");
@@ -96,9 +121,8 @@ class _TeacherEditVideoScreenState
   }
 
   Future<void> _updateVideo() async {
-    if (_titleController.text.isEmpty) return;
+    if (_titleController.text.isEmpty || _selectedYear == null) return;
 
-    // Get teacher ID for notification
     String? teacherId = await SharedPreferencesHelper.instance.getUserId();
     if (teacherId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -110,14 +134,15 @@ class _TeacherEditVideoScreenState
       return;
     }
 
-    // Create tags list first
+    // Process Mapping
+    String mappedAgeGroup = _mapYearToClass(_selectedYear!);
+
     List<String> tagsList = _tagsController.text
         .split(',')
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList();
 
-    // Apply sensitive toggle changes
     if (_isSensitive && !tagsList.contains('scary')) {
       tagsList.add('scary');
     }
@@ -125,7 +150,6 @@ class _TeacherEditVideoScreenState
       tagsList.remove('scary');
     }
 
-    // Create updatedVideo
     final updatedVideo = widget.videoData.copyWith(
       title: _titleController.text.trim(),
       description: _descController.text.trim(),
@@ -136,35 +160,28 @@ class _TeacherEditVideoScreenState
       uploadedAt: widget.videoData.uploadedAt,
       tags: tagsList,
       isSensitive: _isSensitive,
+      ageGroup: mappedAgeGroup, // Updated Classification
     );
 
-    // Send to ViewModel
     await ref
         .read(teacherMultimediaViewModelProvider.notifier)
         .updateVideo(updatedVideo);
 
-    // Send notification only if not sensitive
     if (!_isSensitive) {
-      await _sendClassNotification(teacherId, updatedVideo.title);
+      await _sendClassNotification(teacherId, updatedVideo.title, mappedAgeGroup);
     }
   }
 
   Future<void> _pickThumbnail() async {
     final ImagePicker picker = ImagePicker();
-    final XFile? img = await picker.pickImage(
-      source: ImageSource.gallery,
-    );
-    if (img != null) {
-      setState(() => _newThumbnail = File(img.path));
-    }
+    final XFile? img = await picker.pickImage(source: ImageSource.gallery);
+    if (img != null) setState(() => _newThumbnail = File(img.path));
   }
 
   Future<void> _pickVideo() async {
     final ImagePicker picker = ImagePicker();
     final XFile? video = await picker.pickVideo(source: ImageSource.gallery);
-    if (video != null) {
-      setState(() => _newVideoFile = File(video.path));
-    }
+    if (video != null) setState(() => _newVideoFile = File(video.path));
   }
 
   @override
@@ -230,7 +247,6 @@ class _TeacherEditVideoScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Basic Info Section
                 Container(
                   padding: EdgeInsets.all(4.w),
                   decoration: BoxDecoration(
@@ -257,6 +273,12 @@ class _TeacherEditVideoScreenState
                         maxLines: 3,
                       ),
                       SizedBox(height: 2.h),
+
+                      // --- NEW: Age Selection Dropdown ---
+                      _buildLabel("Target Age (Years)"),
+                      _buildAgeDropdown(),
+                      SizedBox(height: 2.h),
+
                       Row(
                         children: [
                           Expanded(
@@ -286,7 +308,6 @@ class _TeacherEditVideoScreenState
                 ),
                 SizedBox(height: 3.h),
 
-                // Content Safety Section
                 Container(
                   padding: EdgeInsets.all(4.w),
                   decoration: BoxDecoration(
@@ -338,7 +359,6 @@ class _TeacherEditVideoScreenState
                 ),
                 SizedBox(height: 3.h),
 
-                // Thumbnail Section
                 Container(
                   padding: EdgeInsets.all(4.w),
                   decoration: BoxDecoration(
@@ -401,7 +421,7 @@ class _TeacherEditVideoScreenState
                                     _newThumbnail = null;
                                     _existingThumbnailUrl = null;
                                   }),
-                                  child: CircleAvatar(
+                                  child: const CircleAvatar(
                                     backgroundColor: Colors.white,
                                     radius: 16,
                                     child: Icon(Icons.close,
@@ -418,7 +438,6 @@ class _TeacherEditVideoScreenState
                 ),
                 SizedBox(height: 3.h),
 
-                // Video File Section
                 Container(
                   padding: EdgeInsets.all(4.w),
                   decoration: BoxDecoration(
@@ -483,7 +502,6 @@ class _TeacherEditVideoScreenState
                 ),
                 SizedBox(height: 5.h),
 
-                // Update Button
                 SizedBox(
                   width: double.infinity,
                   height: 7.h,
@@ -497,7 +515,7 @@ class _TeacherEditVideoScreenState
                       elevation: 5,
                     ),
                     child: state.isLoading
-                        ? CircularProgressIndicator(color: Colors.white)
+                        ? const CircularProgressIndicator(color: Colors.white)
                         : Text(
                       "Update Video",
                       style: GoogleFonts.poppins(
@@ -515,9 +533,39 @@ class _TeacherEditVideoScreenState
           if (state.isLoading)
             Container(
               color: Colors.black26,
-              child: Center(child: CircularProgressIndicator()),
+              child: const Center(child: CircularProgressIndicator()),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAgeDropdown() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 4.w),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F9FA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _border),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedYear,
+          isExpanded: true,
+          icon: Icon(Icons.keyboard_arrow_down, color: _primaryBlue, size: 24.sp),
+          items: _individualYears
+              .map(
+                (y) => DropdownMenuItem(
+              value: y,
+              child: Text(
+                "$y Years Old",
+                style: GoogleFonts.poppins(fontSize: 15.sp),
+              ),
+            ),
+          )
+              .toList(),
+          onChanged: (v) => setState(() => _selectedYear = v!),
+        ),
       ),
     );
   }
