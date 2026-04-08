@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // 1. Riverpod
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../viewmodels/parent_section/report_safety/parent_safety_provider.dart';
-
 
 class ParentScreenTimeScreen extends ConsumerStatefulWidget {
   const ParentScreenTimeScreen({super.key});
@@ -71,7 +70,6 @@ class _ParentScreenTimeScreenState extends ConsumerState<ParentScreenTimeScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Watch settings to get pause state
     final settings = ref.watch(parentSafetyViewModelProvider).settings;
 
     return Scaffold(
@@ -94,7 +92,6 @@ class _ParentScreenTimeScreenState extends ConsumerState<ParentScreenTimeScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- SECTION 1: DAILY LIMIT ---
             Text("Daily Limit", style: GoogleFonts.poppins(fontSize: 16.sp, fontWeight: FontWeight.w700, color: _textDark)),
             SizedBox(height: 1.h),
             Text("Set the maximum playtime per day.", style: GoogleFonts.poppins(fontSize: 14.sp, color: _textGrey)),
@@ -146,24 +143,13 @@ class _ParentScreenTimeScreenState extends ConsumerState<ParentScreenTimeScreen>
 
             SizedBox(height: 4.h),
 
-            // --- SECTION 2: BEDTIME ---
-            Text("Bedtime", style: GoogleFonts.poppins(fontSize: 16.sp, fontWeight: FontWeight.w700, color: _textDark)),
+            Text("Watching time", style: GoogleFonts.poppins(fontSize: 16.sp, fontWeight: FontWeight.w700, color: _textDark)),
             SizedBox(height: 1.h),
             Text("The app will be unavailable during these hours.", style: GoogleFonts.poppins(fontSize: 14.sp, color: _textGrey)),
             SizedBox(height: 2.h),
             Container(
               padding: EdgeInsets.all(5.w),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]),
               child: Stack(
                 children: [
                   Row(
@@ -172,18 +158,9 @@ class _ParentScreenTimeScreenState extends ConsumerState<ParentScreenTimeScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              "From",
-                              style: GoogleFonts.poppins(
-                                fontSize: 12.sp,
-                                color: _textGrey,
-                              ),
-                            ),
+                            Text("From", style: GoogleFonts.poppins(fontSize: 12.sp, color: _textGrey)),
                             SizedBox(height: 1.h),
-                            _buildTimeSelector(
-                              _formatTime(_bedtimeStart),
-                                  () => _selectTime(true),
-                            ),
+                            _buildTimeSelector(_formatTime(_bedtimeStart), () => _selectTime(true)),
                           ],
                         ),
                       ),
@@ -192,39 +169,21 @@ class _ParentScreenTimeScreenState extends ConsumerState<ParentScreenTimeScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              "To",
-                              style: GoogleFonts.poppins(
-                                fontSize: 12.sp,
-                                color: _textGrey,
-                              ),
-                            ),
+                            Text("To", style: GoogleFonts.poppins(fontSize: 12.sp, color: _textGrey)),
                             SizedBox(height: 1.h),
-                            _buildTimeSelector(
-                              _formatTime(_bedtimeEnd),
-                                  () => _selectTime(false),
-                            ),
+                            _buildTimeSelector(_formatTime(_bedtimeEnd), () => _selectTime(false)),
                           ],
                         ),
                       ),
                     ],
                   ),
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Icon(
-                      Icons.nights_stay_rounded,
-                      color: Colors.indigo.shade100,
-                      size: 26.sp,
-                    ),
-                  ),
+                  Positioned(right: 0, top: 0, child: Icon(Icons.nights_stay_rounded, color: Colors.indigo.shade100, size: 26.sp)),
                 ],
               ),
             ),
 
             SizedBox(height: 4.h),
 
-            // --- SECTION 3: PAUSE BUTTON ---
             _buildPauseButton(
                 isPaused: settings.isAppPaused,
                 onTap: (currentValue) {
@@ -234,8 +193,6 @@ class _ParentScreenTimeScreenState extends ConsumerState<ParentScreenTimeScreen>
 
             SizedBox(height: 4.h),
 
-            // --- SAVE BUTTON ---
-            // Removed Spacer() to prevent layout error
             SizedBox(
               width: double.infinity,
               height: 7.h,
@@ -253,8 +210,6 @@ class _ParentScreenTimeScreenState extends ConsumerState<ParentScreenTimeScreen>
                 ),
               ),
             ),
-
-            // Padding at bottom for scroll
             SizedBox(height: 5.h),
           ],
         ),

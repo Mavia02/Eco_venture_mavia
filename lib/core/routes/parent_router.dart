@@ -1,7 +1,6 @@
 import 'package:eco_venture/models/parent_alert_model.dart';
 import 'package:eco_venture/navigation/bottom_nav_parent.dart';
 import 'package:eco_venture/views/parent_section/notification/parent_notification_screen.dart';
-import 'package:eco_venture/views/parent_section/parent_child_section_screen.dart';
 import 'package:eco_venture/views/parent_section/profile/parent_edit_profile_screen.dart';
 import 'package:eco_venture/views/parent_section/profile/parent_profile_screen.dart';
 import 'package:eco_venture/views/parent_section/safety_and_report/parent_content_filters_screen.dart';
@@ -15,10 +14,11 @@ import '../../views/parent_section/parent_home_screen.dart';
 import '../constants/route_names.dart';
 
 class ParentRouter {
+  // We change the top-level builder to go straight to BottomNavParent
   static GoRoute routes = GoRoute(
     path: RouteNames.parentChildSection,
     name: 'parentChildSection',
-    builder: (context, state) => const ParentChildSelectionScreen(),
+    builder: (context, state) => const BottomNavParent(), // Landing directly on Nav
     routes: [
       GoRoute(
         path: RouteNames.bottomNavParent,
@@ -26,17 +26,16 @@ class ParentRouter {
         builder: (context, state) => const BottomNavParent(),
         routes: [
           GoRoute(
-            path: RouteNames.parentHome,
-            name: 'parentHome',
-            builder: (context, state) => const ParentHomeScreen(),
-            routes: [
-              GoRoute(
-                path: RouteNames.parentNotificationsScreen,
-                name: 'parentNotificationsScreen',
-                builder: (context, state) => const ParentNotificationScreen(),
-              ),
-
-            ]
+              path: RouteNames.parentHome,
+              name: 'parentHome',
+              builder: (context, state) => const ParentHomeScreen(),
+              routes: [
+                GoRoute(
+                  path: RouteNames.parentNotificationsScreen,
+                  name: 'parentNotificationsScreen',
+                  builder: (context, state) => const ParentNotificationScreen(),
+                ),
+              ]
           ),
 
           GoRoute(
@@ -71,7 +70,7 @@ class ParentRouter {
                 path: RouteNames.parentReportDetailScreen,
                 name: 'parentReportDetailScreen',
                 builder: (context, state) {
-                  final alertData=state.extra as ParentAlertModel;
+                  final alertData = state.extra as ParentAlertModel;
                   return ParentReportDetailScreen(alert: alertData);
                 },
               ),

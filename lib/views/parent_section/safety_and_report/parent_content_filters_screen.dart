@@ -2,12 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:responsive_sizer/responsive_sizer.dart';
-import 'package:go_router/go_router.dart';
-
 import '../../../viewmodels/parent_section/report_safety/parent_safety_provider.dart';
 
 class ParentContentFiltersScreen extends ConsumerStatefulWidget {
@@ -30,7 +25,6 @@ class _ParentContentFiltersScreenState extends ConsumerState<ParentContentFilter
   @override
   void initState() {
     super.initState();
-    // Load existing settings
     final settings = ref.read(parentSafetyViewModelProvider).settings;
     _blockScaryContent = settings.blockScaryContent;
     _blockSocialInteraction = settings.blockSocialInteraction;
@@ -103,7 +97,7 @@ class _ParentContentFiltersScreenState extends ConsumerState<ParentContentFilter
             SizedBox(
               width: double.infinity, height: 7.5.h,
               child: ElevatedButton(
-                onPressed: _saveFilters, // Connected
+                onPressed: _saveFilters,
                 style: ElevatedButton.styleFrom(backgroundColor: _primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)), elevation: 5),
                 child: Text("Save Filters", style: GoogleFonts.poppins(fontSize: 16.sp, fontWeight: FontWeight.bold, color: Colors.white)),
               ),
@@ -114,8 +108,8 @@ class _ParentContentFiltersScreenState extends ConsumerState<ParentContentFilter
       ),
     );
   }
-  // ... (Keep helper _buildFilterTile same as before) ...
+
   Widget _buildFilterTile({required String title, required String subtitle, required IconData icon, required Color color, required bool value, required Function(bool) onChanged}) {
-    return Container(padding: EdgeInsets.all(4.w), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))], border: Border.all(color: Colors.white)), child: Row(children: [Container(padding: EdgeInsets.all(3.w), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)), child: Icon(icon, color: color, size: 22.sp)), SizedBox(width: 4.w), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: GoogleFonts.poppins(fontSize: 15.sp, fontWeight: FontWeight.w700, color: _textDark)), SizedBox(height: 0.5.h), Text(subtitle, style: GoogleFonts.poppins(fontSize: 11.sp, color: _textGrey, height: 1.4, fontWeight: FontWeight.w500))])), Transform.scale(scale: 0.9, child: Switch(value: value, onChanged: onChanged, activeColor: Colors.white, activeTrackColor: _primary, inactiveThumbColor: Colors.white, inactiveTrackColor: Colors.grey.shade200, trackOutlineColor: MaterialStateProperty.all(Colors.transparent)))]));
+    return Container(padding: EdgeInsets.all(4.w), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 5))], border: Border.all(color: Colors.white)), child: Row(children: [Container(padding: EdgeInsets.all(3.w), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)), child: Icon(icon, color: color, size: 22.sp)), SizedBox(width: 4.w), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: GoogleFonts.poppins(fontSize: 15.sp, fontWeight: FontWeight.w700, color: _textDark)), SizedBox(height: 0.5.h), Text(subtitle, style: GoogleFonts.poppins(fontSize: 11.sp, color: _textGrey, height: 1.4, fontWeight: FontWeight.w500))])), Transform.scale(scale: 0.9, child: Switch(value: value, onChanged: onChanged, activeColor: Colors.white, activeTrackColor: _primary, inactiveThumbColor: Colors.white, inactiveTrackColor: Colors.grey.shade200))]));
   }
 }

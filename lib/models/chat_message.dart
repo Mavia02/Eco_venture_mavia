@@ -13,34 +13,25 @@ class ChatMessage {
     required this.time,
   });
 
+  // Converts a ChatMessage into a Map for Sqflite
   Map<String, dynamic> toMap() {
     return {
       'userId': userId,
       'sender': sender,
-      'isUser': isUser ? 1 : 0,
+      'isUser': isUser ? 1 : 0, // SQLite doesn't store bools, we use 0/1
       'message': message,
       'time': time.toIso8601String(),
     };
   }
 
+  // Essential for ChatDatabase: Converts SQL rows back into ChatMessage objects
   factory ChatMessage.fromMap(Map<String, dynamic> map) {
-    final isUserVal = map['isUser'];
-    bool isUserBool;
-    if (isUserVal is int) {
-      isUserBool = isUserVal == 1;
-    } else if (isUserVal is String) {
-      isUserBool = isUserVal == '1' || isUserVal.toLowerCase() == 'true';
-    } else {
-      // fallback: use sender string
-      isUserBool = (map['sender']?.toString().toLowerCase() == 'user');
-    }
-
     return ChatMessage(
       userId: map['userId'] ?? '',
-      sender: map['sender'] ?? (isUserBool ? 'user' : 'bot'),
-      isUser: isUserBool,
+      sender: map['sender'] ?? 'bot',
+      isUser: map['isUser'] == 1,
       message: map['message'] ?? '',
-      time: DateTime.parse(map['time']),
+      time: DateTime.parse(map['time'] ?? DateTime.now().toIso8601String()),
     );
   }
 }

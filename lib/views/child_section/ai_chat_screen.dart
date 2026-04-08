@@ -1,4 +1,3 @@
-// ai_chat_screen_v2.dart
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -21,9 +20,9 @@ class _AiChatScreenV2State extends ConsumerState<AiChatScreen>
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  late final AnimationController _bgShiftController; // gradient shift
-  late final AnimationController _particleController; // particle motion
-  late final AnimationController _sendPulseController; // send glow pulse
+  late final AnimationController _bgShiftController;
+  late final AnimationController _particleController;
+  late final AnimationController _sendPulseController;
 
   @override
   void initState() {
@@ -60,7 +59,6 @@ class _AiChatScreenV2State extends ConsumerState<AiChatScreen>
     final text = _controller.text.trim();
     _controller.clear();
 
-    // pulse the send glow
     _sendPulseController.forward(from: 0);
 
     chatVM.sendMessage(text).then((_) => _scrollToBottom());
@@ -84,19 +82,17 @@ class _AiChatScreenV2State extends ConsumerState<AiChatScreen>
     final chatVM = ref.read(chatProvider.notifier);
 
     return PopScope(
-    canPop: false, // prevents auto pop
-    onPopInvokedWithResult: (didPop, result) {
-      if (!didPop) {
-        // This runs when system back button is pressed
-        context.goNamed('bottomNavChild');
-      }
-    },
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          context.goNamed('bottomNavChild');
+        }
+      },
       child: Scaffold(
         extendBody: true,
-        // Remove default backgroundColor; we paint custom background below
         body: Stack(
           children: [
-            // 1) Layered animated gradient background with subtle parallax movement
+            // Layered animated gradient background
             AnimatedBuilder(
               animation: _bgShiftController,
               builder: (context, _) {
@@ -108,7 +104,7 @@ class _AiChatScreenV2State extends ConsumerState<AiChatScreen>
               },
             ),
 
-            // 2) Subtle noise / vignette for cinematic depth
+            // Subtle noise / vignette
             Positioned.fill(
               child: IgnorePointer(
                 child: Container(
@@ -127,7 +123,7 @@ class _AiChatScreenV2State extends ConsumerState<AiChatScreen>
               ),
             ),
 
-            // 3) Particle layer (soft floating lights)
+            // Particle layer
             AnimatedBuilder(
               animation: _particleController,
               builder: (context, _) {
@@ -138,7 +134,7 @@ class _AiChatScreenV2State extends ConsumerState<AiChatScreen>
               },
             ),
 
-            // 4) Main UI content
+            // Main UI content
             SafeArea(
               child: Column(
                 children: [
@@ -153,7 +149,6 @@ class _AiChatScreenV2State extends ConsumerState<AiChatScreen>
                         physics: const BouncingScrollPhysics(),
                         itemCount: chatState.messages.length + (chatState.isLoading ? 1 : 0),
                         itemBuilder: (context, i) {
-                          // if loading, show typing indicator at the end
                           if (i == chatState.messages.length && chatState.isLoading) {
                             return Padding(
                               padding: EdgeInsets.symmetric(vertical: 1.2.h),
@@ -173,8 +168,7 @@ class _AiChatScreenV2State extends ConsumerState<AiChatScreen>
                     ),
                   ),
 
-                  // Floating input bar - placed intentionally above bottom nav.
-                  // Note: bottom padding set to 8.h so it sits above BottomNavBar.
+                  // Floating input bar
                   Padding(
                     padding: EdgeInsets.fromLTRB(3.w, 1.h, 3.w, 8.h),
                     child: _InputBar(
@@ -193,7 +187,7 @@ class _AiChatScreenV2State extends ConsumerState<AiChatScreen>
   }
 }
 
-/// Top header with title and subtle subtitle
+/// Top header with title and subtitle
 class _TopHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -212,7 +206,7 @@ class _TopHeader extends StatelessWidget {
           ),
           SizedBox(height: 0.4.h),
           Text(
-            'Your AI coding & design buddy',
+            'Eco Venture Smart Assistant',
             style: GoogleFonts.poppins(
               color: Colors.white70,
               fontSize: 12.sp,
@@ -225,59 +219,106 @@ class _TopHeader extends StatelessWidget {
   }
 }
 
-/// Chat bubble widget (user and AI)
+/// Updated Chat bubble with "Verified Source" badge
 class _ChatBubble extends StatelessWidget {
   final ChatMessage message;
   const _ChatBubble({required this.message});
 
   @override
   Widget build(BuildContext context) {
+    // Check 'isUser' from the model to determine layout and style
     final isUser = message.isUser;
+    // Specifically check if the sender is 'bot' for the verified badge
+    final isBot = message.sender == 'bot';
+
     final radius = 16.0;
+
+    // Electric blue/cyan for AI side, Purple for User side
     final gradient = isUser
         ? const LinearGradient(colors: [Color(0xFF6A4BFF), Color(0xFF4C1DFF)])
         : const LinearGradient(colors: [Color(0xFF00E5FF), Color(0xFF00B0FF)]);
+
     final shadowColor = isUser ? Colors.deepPurpleAccent : Colors.cyanAccent;
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 78.w),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: gradient,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(radius),
-              topRight: Radius.circular(radius),
-              bottomLeft: Radius.circular(isUser ? radius : 6),
-              bottomRight: Radius.circular(isUser ? 6 : radius),
+      child: Column(
+        crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          // If message is from bot, add a small label above
+          if (isBot)
+            Padding(
+              padding: EdgeInsets.only(left: 1.w, bottom: 0.5.h),
+              child: Text(
+                "EcoBuddy",
+                style: GoogleFonts.poppins(
+                  color: Colors.white54,
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: shadowColor.withValues(alpha: 0.28),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
-              )
-            ],
-          ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 3.6.w, vertical: 1.4.h),
-            child: Text(
-              message.message,
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 15.sp,
-                height: 1.3,
-                fontWeight: FontWeight.w500,
+
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 78.w),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: gradient,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(radius),
+                  topRight: Radius.circular(radius),
+                  bottomLeft: Radius.circular(isUser ? radius : 6),
+                  bottomRight: Radius.circular(isUser ? 6 : radius),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: shadowColor.withValues(alpha: 0.28),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  )
+                ],
+              ),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 3.6.w, vertical: 1.4.h),
+                child: Text(
+                  message.message,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 15.sp,
+                    height: 1.3,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
             ),
           ),
-        ),
+
+          // Verified Source Badge for Bot messages
+          if (isBot)
+            Padding(
+              padding: EdgeInsets.only(top: 0.8.h, left: 1.w),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.verified_user_rounded, color: Colors.cyanAccent, size: 13.sp),
+                  SizedBox(width: 1.w),
+                  Text(
+                    "Verified Eco Venture Source",
+                    style: GoogleFonts.poppins(
+                      color: Colors.white70,
+                      fontSize: 11.sp,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
 }
-
 
 class _TypingIndicator extends StatefulWidget {
   @override
@@ -352,7 +393,6 @@ class _TypingIndicatorState extends State<_TypingIndicator>
   }
 }
 
-/// Input bar with glassmorphism effect and reactive send glow.
 class _InputBar extends StatefulWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
@@ -371,15 +411,9 @@ class _InputBar extends StatefulWidget {
 class _InputBarState extends State<_InputBar> {
   @override
   Widget build(BuildContext context) {
-    // Pulse animation for glow amount
-    final pulse = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: widget.sendPulse, curve: Curves.easeOut),
-    );
-
     return Stack(
       alignment: Alignment.centerRight,
       children: [
-        // glass background
         ClipRRect(
           borderRadius: BorderRadius.circular(36),
           child: BackdropFilter(
@@ -408,14 +442,13 @@ class _InputBarState extends State<_InputBar> {
                       onSubmitted: (_) => widget.onSend(),
                     ),
                   ),
-                  SizedBox(width: 12.w), // space for floating send button
+                  SizedBox(width: 12.w),
                 ],
               ),
             ),
           ),
         ),
 
-        // Send button with glowing halo that reacts to sendPulse.
         Positioned(
           right: 6.w,
           child: AnimatedBuilder(
@@ -452,14 +485,12 @@ class _InputBarState extends State<_InputBar> {
   }
 }
 
-/// Parallax gradient painter - multiple gradient layers moving at different speeds
 class _ParallaxGradientPainter extends CustomPainter {
   final double t;
   _ParallaxGradientPainter(this.t);
 
   @override
   void paint(Canvas canvas, Size size) {
-    // base gradient (slow)
     final rect = Offset.zero & size;
     final paintBase = Paint()
       ..shader = LinearGradient(
@@ -470,7 +501,6 @@ class _ParallaxGradientPainter extends CustomPainter {
       ).createShader(rect);
     canvas.drawRect(rect, paintBase);
 
-    // soft moving radial light (faster)
     final center = Offset(size.width * (0.2 + 0.6 * sin(2 * pi * (t * 0.9))), size.height * 0.15);
     final radial = Paint()
       ..shader = RadialGradient(
@@ -479,7 +509,6 @@ class _ParallaxGradientPainter extends CustomPainter {
       ).createShader(Rect.fromCircle(center: center, radius: size.width * 0.9));
     canvas.drawRect(rect, radial);
 
-    // violet shimmer stripe (subtle)
     final path = Path();
     final y = size.height * (0.35 + 0.08 * sin(2 * pi * t));
     path.moveTo(0, y);
@@ -496,13 +525,10 @@ class _ParallaxGradientPainter extends CustomPainter {
   bool shouldRepaint(covariant _ParallaxGradientPainter oldDelegate) => oldDelegate.t != t;
 }
 
-/// Particle painter - soft glowing orbs floating in layered depth
 class _ParticlePainter extends CustomPainter {
   final double progress;
-  final Random _rnd = Random();
   _ParticlePainter(this.progress);
 
-  // Pre-generate some particle seed data (positions / speed / size)
   static final List<_ParticleSeed> seeds = List.generate(28, (i) {
     final r = Random(i);
     return _ParticleSeed(
@@ -526,7 +552,6 @@ class _ParticlePainter extends CustomPainter {
       paint.color = _chooseColor(s.colorIndex).withValues(alpha: 0.06 + (s.size / 30));
       canvas.drawCircle(Offset(dx, dy), radius, paint);
 
-      // small blurred highlight
       paint.color = Colors.white.withValues(alpha: 0.02 + (s.size / 140));
       canvas.drawCircle(Offset(dx - radius / 2, dy - radius / 2), radius / 2, paint);
     }
@@ -534,11 +559,11 @@ class _ParticlePainter extends CustomPainter {
 
   Color _chooseColor(int i) {
     final palette = [
-      const Color(0xFF8E6BFF), // purple
-      const Color(0xFF00E5FF), // cyan
-      const Color(0xFFFF8A80), // warm
-      const Color(0xFF7C4DFF), // violet
-      const Color(0xFF00B0FF), // blue
+      const Color(0xFF8E6BFF),
+      const Color(0xFF00E5FF),
+      const Color(0xFFFF8A80),
+      const Color(0xFF7C4DFF),
+      const Color(0xFF00B0FF),
     ];
     return palette[i % palette.length];
   }
