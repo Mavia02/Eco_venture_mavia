@@ -2,13 +2,11 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:rxdart/rxdart.dart';
 import '../models/child_progress_model.dart';
 import '../models/quiz_topic_model.dart';
+import '../models/parent_safety_settings_model.dart';
 import '../services/shared_preferences_helper.dart';
-
-import 'package:rxdart/rxdart.dart';
-import '../models/parent_safety_settings_model.dart'; // Import Settings Model
-
 
 class ChildQuizService {
   final FirebaseDatabase _database = FirebaseDatabase.instance;
@@ -18,25 +16,14 @@ class ChildQuizService {
   // --- HELPER: FIND TEACHER ID ---
   Future<String?> _getTeacherId() async {
     try {
-      // 1. Get Current User ID (Prefs first for speed/safety)
       final user = await SharedPreferencesHelper.instance.getUserId();
+      if (user == null) return null;
 
-      if (user == null) {
-        // Fallback to Auth
-        if (_auth.currentUser != null) return null; // If auth is null, return null
-        return null;
-      }
-
-      // 2. Fetch Document directly from Firestore
       final doc = await _firestore.collection('users').doc(user).get();
-
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
-
-        // 3. Check for 'teacher_id'
         if (data.containsKey('teacher_id') && data['teacher_id'] != null) {
           final String teacherId = data['teacher_id'];
-          // Cache it locally
           await SharedPreferencesHelper.instance.saveChildTeacherId(teacherId);
           return teacherId;
         }
@@ -47,13 +34,12 @@ class ChildQuizService {
     return null;
   }
 
-
   // --- HELPER: GET SAFETY SETTINGS STREAM ---
   Stream<ParentSafetySettingsModel> _getSafetySettings() {
     return _auth.authStateChanges().asyncExpand((user) async* {
       String? uid = user?.uid ?? await SharedPreferencesHelper.instance.getUserId();
       if (uid == null) {
-        yield ParentSafetySettingsModel(); // Default: No restrictions
+        yield ParentSafetySettingsModel();
       } else {
         yield* _database.ref('parent_settings/$uid').onValue.map((event) {
           final data = event.snapshot.value;
@@ -67,19 +53,18 @@ class ChildQuizService {
   }
 
   // ==================================================
-  //  FETCH TOPICS (Filtered)
+  //  FETCH TOPICS (Now with Age Classification)
   // ==================================================
 
   // 1. ADMIN CONTENT
-  Stream<List<QuizTopicModel>> getAdminTopicsStream(String category) {
+  Stream<List<QuizTopicModel>> getAdminTopicsStream(String category, String studentAgeGroup) {
     final dataStream = _database.ref('Public/Quizzes/$category').onValue.map((event) {
       return _parseTopics(event.snapshot.value, category);
     }).handleError((e) => <QuizTopicModel>[]);
 
-    // Combine Data with Safety Rules
     return Rx.combineLatest2(dataStream, _getSafetySettings(),
             (List<QuizTopicModel> topics, ParentSafetySettingsModel settings) {
-          return _applyFilters(topics, settings, category);
+          return _applyFilters(topics, settings, category, studentAgeGroup);
         }
     );
   }
@@ -91,7 +76,7 @@ class ChildQuizService {
   }
 
   // 2. TEACHER CONTENT
-  Stream<List<QuizTopicModel>> getTeacherTopicsStream(String category) {
+  Stream<List<QuizTopicModel>> getTeacherTopicsStream(String category, String studentAgeGroup) {
     final settingsStream = _getSafetySettings();
 
     return Stream.fromFuture(_getTeacherId()).asyncExpand((teacherId) {
@@ -105,10 +90,9 @@ class ChildQuizService {
         teacherDataStream = Stream.value([]);
       }
 
-      // Combine Data with Safety Rules
       return Rx.combineLatest2(teacherDataStream, settingsStream,
               (List<QuizTopicModel> topics, ParentSafetySettingsModel settings) {
-            return _applyFilters(topics, settings, category);
+            return _applyFilters(topics, settings, category, studentAgeGroup);
           }
       );
     });
@@ -126,19 +110,29 @@ class ChildQuizService {
     });
   }
 
-  // --- FILTER LOGIC ---
-  List<QuizTopicModel> _applyFilters(List<QuizTopicModel> topics, ParentSafetySettingsModel settings, String category) {
+  // --- FILTER LOGIC (Updated with Age Check) ---
+  List<QuizTopicModel> _applyFilters(
+      List<QuizTopicModel> topics,
+      ParentSafetySettingsModel settings,
+      String category,
+      String studentAgeGroup) {
+
     return topics.where((topic) {
-      // 1. Block Scary Content
+      // 1. AGE BRACKET FILTER (PRIMARY)
+      // Checks if the quiz matches the child's classification (e.g. 6-8)
+      if (topic.ageGroup.trim() != studentAgeGroup.trim()) {
+        return false;
+      }
+
+      // 2. Block Scary Content (Original Logic)
       if (settings.blockScaryContent) {
         if (topic.isSensitive) return false;
         if (topic.tags.contains('scary') || topic.tags.contains('horror')) return false;
       }
 
-      // 2. Educational Only Mode
+      // 3. Educational Only Mode (Original Logic)
       if (settings.educationalOnlyMode) {
         const allowedCategories = ['Science', 'Math', 'Mathematics', 'Ecosystem', 'History', 'Geography', 'Animals', 'Plants'];
-        // Strict Check: Only allow academic categories
         if (!allowedCategories.contains(category)) return false;
       }
 
@@ -146,7 +140,7 @@ class ChildQuizService {
     }).toList();
   }
 
-  // --- PARSING HELPERS ---
+  // --- PARSING HELPERS (Unchanged) ---
   List<QuizTopicModel> _parseTopics(dynamic data, String category) {
     if (data == null) return [];
     try {
@@ -180,7 +174,7 @@ class ChildQuizService {
   }
 
   // --- PROGRESS LOGIC (Unchanged) ---
-  Stream<Map<String, ChildQuizProgressModel>> getChildProgressStream() {
+  Stream<Map<String, ChildQuizProgressModel>> getProgressStream() {
     return _auth.authStateChanges().asyncExpand((user) async* {
       String? uid = user?.uid ?? await SharedPreferencesHelper.instance.getUserId();
       if (uid == null) { yield {}; } else {

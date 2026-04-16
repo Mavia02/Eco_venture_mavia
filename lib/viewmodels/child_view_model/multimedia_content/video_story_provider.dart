@@ -1,32 +1,33 @@
-
-import 'package:eco_venture/viewmodels/child_view_model/multimedia_content/story_state.dart';
-import 'package:eco_venture/viewmodels/child_view_model/multimedia_content/story_view_model.dart';
-import 'package:eco_venture/viewmodels/child_view_model/multimedia_content/video_state.dart';
-import 'package:eco_venture/viewmodels/child_view_model/multimedia_content/video_view_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../repositories/video_StoryRepo.dart';
 import '../../../services/video_story_service.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-
-// Import the separate ViewModel files
+import '../../../repositories/video_StoryRepo.dart';
 import 'video_view_model.dart';
+import 'video_state.dart';
 import 'story_view_model.dart';
+import 'story_state.dart';
 
-// 1. Services
-final videoStoryServiceProvider = Provider((ref) => VideoStoryService());
+// 1. Service Provider
+final videoStoryServiceProvider = Provider<VideoStoryService>((ref) {
+  return VideoStoryService();
+});
 
-// 2. Repository
-final videoStoryRepositoryProvider = Provider((ref) {
-  return VideoStoryRepository(ref.watch(videoStoryServiceProvider));
+// 2. Repository Provider
+// Logic: Corrected to use video_story_repository.dart and watch the service
+final videoStoryRepositoryProvider = Provider<VideoStoryRepository>((ref) {
+  final service = ref.watch(videoStoryServiceProvider);
+  return VideoStoryRepository(service);
 });
 
 // 3. Video ViewModel Provider
+// Logic: Points to the standalone VideoViewModel and VideoState
 final videoViewModelProvider = StateNotifierProvider<VideoViewModel, VideoState>((ref) {
-  return VideoViewModel(ref.watch(videoStoryRepositoryProvider));
+  final repository = ref.watch(videoStoryRepositoryProvider);
+  return VideoViewModel(repository);
 });
 
 // 4. Story ViewModel Provider
+// Logic: Points to the standalone StoryViewModel and StoryState
 final storyViewModelProvider = StateNotifierProvider<StoryViewModel, StoryState>((ref) {
-  return StoryViewModel(ref.watch(videoStoryRepositoryProvider));
+  final repository = ref.watch(videoStoryRepositoryProvider);
+  return StoryViewModel(repository);
 });

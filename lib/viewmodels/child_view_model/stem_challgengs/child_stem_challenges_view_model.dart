@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/stem_submission_model.dart';
 import '../../../repositories/child_stem_challenge_repository.dart';
 import '../../../services/cloudinary_service.dart';
+import '../../../services/shared_preferences_helper.dart'; // Added for age group retrieval
 import 'child_stem_challenges_state.dart';
 
 class ChildStemChallengesViewModel extends StateNotifier<ChildStemChallengesState> {
@@ -19,16 +20,23 @@ class ChildStemChallengesViewModel extends StateNotifier<ChildStemChallengesStat
     _loadSubmissionHistory();
   }
 
-  void loadChallenges(String category) {
+  /// Logic: Updated to be async to retrieve the student's ageGroup from SharedPreferences
+  /// before initiating the filtered repository streams.
+  Future<void> loadChallenges(String category) async {
     _adminSub?.cancel();
     _teacherSub?.cancel();
 
-    _adminSub = _repository.getAdminChallenges(category).listen(
+    // 1. Retrieve the age group stored during login or registration
+    // Defaulting to "6 - 8" as a safe fallback if no group is found
+    final String ageGroup = await SharedPreferencesHelper.instance.getUserAgeGroup() ?? "6 - 8";
+
+    // 2. Pass both category and ageGroup to the repository for dual-layer filtering
+    _adminSub = _repository.getAdminChallenges(category, ageGroup).listen(
           (data) => state = state.copyWith(adminChallenges: data),
       onError: (e) => print("Admin STEM Error: $e"),
     );
 
-    _teacherSub = _repository.getTeacherChallenges(category).listen(
+    _teacherSub = _repository.getTeacherChallenges(category, ageGroup).listen(
           (data) => state = state.copyWith(teacherChallenges: data),
       onError: (e) => print("Teacher STEM Error: $e"),
     );
@@ -41,28 +49,25 @@ class ChildStemChallengesViewModel extends StateNotifier<ChildStemChallengesStat
     );
   }
 
-  // --- FIX: Accept List<File> ---
+  // --- SUBMISSION LOGIC (UNCHANGED) ---
   Future<void> submitChallengeWithProof({
     required StemSubmissionModel submission,
-    required List<File> proofImages, // Updated to List
+    required List<File> proofImages,
   }) async {
     state = state.copyWith(isLoading: true);
 
     try {
-      // 1. Upload Multiple Images
       final List<String> imageUrls = await _cloudinaryService.uploadMultipleTaskImages(proofImages);
 
       if (imageUrls.isEmpty) {
         throw Exception("Failed to upload proof images. Please try again.");
       }
 
-      // 2. Update Model with URL List
       final finalSubmission = submission.copyWith(
         proofImageUrls: imageUrls,
         status: 'pending',
       );
 
-      // 3. Save
       await _repository.submitChallenge(finalSubmission);
 
       state = state.copyWith(isLoading: false, isSuccess: true);

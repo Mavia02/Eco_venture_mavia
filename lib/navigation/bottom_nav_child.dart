@@ -98,7 +98,7 @@ class _BottomNavChildState extends State<BottomNavChild>
                 children: [
                   _buildNavItem(Icons.home_rounded, "Home", 0),
                   _buildNavItem(Icons.smart_toy_rounded, "ChatBot", 1),
-                  _buildNavItem(Icons.shield_rounded, "Safety", 2),
+                  _buildNavItem(Icons.report_problem, "Report", 2),
                   _buildNavItem(Icons.settings_rounded, "Settings", 3),
                 ],
               ),

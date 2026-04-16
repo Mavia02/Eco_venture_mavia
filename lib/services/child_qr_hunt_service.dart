@@ -7,11 +7,6 @@ import '../models/parent_safety_settings_model.dart';
 import '../models/qr_hunt_read_model.dart';
 import '../services/shared_preferences_helper.dart';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:rxdart/rxdart.dart';
-
 class ChildQrHuntService {
   final FirebaseDatabase _database = FirebaseDatabase.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -62,9 +57,9 @@ class ChildQrHuntService {
   }
 
   // ==================================================
-  //  FETCH QR HUNTS (ADMIN + TEACHER)
+  //  FETCH QR HUNTS (Now with Age Filter)
   // ==================================================
-  Stream<List<QrHuntReadModel>> getHuntsStream() {
+  Stream<List<QrHuntReadModel>> getHuntsStream(String studentAgeGroup) {
     final adminStream = _database
         .ref('Public/QrHunts')
         .onValue
@@ -98,24 +93,20 @@ class ChildQrHuntService {
             List<QrHuntReadModel> teacher,
             ParentSafetySettingsModel settings) {
           final combined = [...admin, ...teacher];
-          return _applyFilters(combined, settings);
+          return _applyFilters(combined, settings, studentAgeGroup);
         },
       );
     });
   }
 
   // ==================================================
-  //  APPLY PARENT FILTERS (SAFE)
+  //  APPLY FILTERS (Age + Parent Safety)
   // ==================================================
   List<QrHuntReadModel> _applyFilters(
       List<QrHuntReadModel> hunts,
       ParentSafetySettingsModel settings,
+      String studentAgeGroup, // Added parameter
       ) {
-    // 🔥 If no parent filters enabled → return all
-    if (!settings.blockScaryContent &&
-        !settings.educationalOnlyMode) {
-      return hunts;
-    }
 
     const blockedKeywords = [
       'railway', 'train', 'bridge', 'road', 'highway', 'river',
@@ -126,6 +117,12 @@ class ChildQrHuntService {
     String norm(String s) => s.toLowerCase();
 
     return hunts.where((hunt) {
+      // 1. AGE BRACKET FILTER (PRIMARY)
+      if (hunt.ageGroup.trim() != studentAgeGroup.trim()) {
+        return false;
+      }
+
+      // 2. PARENT SAFETY FILTERS
       final title = norm(hunt.title);
       final cluesText = norm(hunt.clues.join(' '));
 
@@ -153,7 +150,7 @@ class ChildQrHuntService {
   }
 
   // ==================================================
-  //  SAFE PARSER (MAIN FIX)
+  //  SAFE PARSER (Now including ageGroup)
   // ==================================================
   List<QrHuntReadModel> _parseHunts(
       dynamic data, {
@@ -169,15 +166,15 @@ class ChildQrHuntService {
 
         final map = Map<String, dynamic>.from(value);
 
-        // 🔥 SAFE DEFAULTS (PREVENT DROP)
+        // SAFE DEFAULTS
         map['title'] ??= '';
         map['clues'] ??= [];
         map['points'] ??= 0;
         map['difficulty'] ??= 'Easy';
+        map['ageGroup'] ??= '6 - 8'; // Default
 
         final model = QrHuntReadModel.fromMap(key.toString(), map);
 
-        // 🔥 FORCE SOURCE TAG WITHOUT copyWith
         hunts.add(
           QrHuntReadModel(
             id: model.id,
@@ -187,6 +184,7 @@ class ChildQrHuntService {
             clues: model.clues,
             createdBy: isTeacher ? 'teacher' : 'admin',
             creatorId: model.creatorId,
+            ageGroup: model.ageGroup, // Correctly passing ageGroup
           ),
         );
       } catch (e) {
@@ -225,9 +223,6 @@ class ChildQrHuntService {
     });
   }
 
-  // ==================================================
-  //  SAVE PROGRESS
-  // ==================================================
   Future<void> saveProgress(QrHuntProgressModel progress) async {
     String? uid = await SharedPreferencesHelper.instance.getUserId();
     uid ??= _auth.currentUser?.uid;

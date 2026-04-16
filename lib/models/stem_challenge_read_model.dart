@@ -17,6 +17,9 @@ class StemChallengeReadModel {
   final String createdBy; // 'admin' or 'teacher'
   final String creatorId;
 
+  // AGE CLASSIFICATION FIELD
+  final String ageGroup; // <--- ADDED THIS FIELD
+
   StemChallengeReadModel({
     required this.id,
     required this.adminId,
@@ -27,10 +30,11 @@ class StemChallengeReadModel {
     this.imageUrl,
     required this.materials,
     required this.steps,
-    this.isSensitive = false, // Default to false
-    this.tags = const [], // Default empty
+    this.isSensitive = false,
+    this.tags = const [],
     this.createdBy = 'admin',
     this.creatorId = '',
+    required this.ageGroup, // <--- ADDED TO CONSTRUCTOR
   });
 
   factory StemChallengeReadModel.fromMap(String id, Map<String, dynamic> map) {
@@ -44,15 +48,15 @@ class StemChallengeReadModel {
       imageUrl: map['imageUrl'],
       materials: List<String>.from(map['materials'] ?? []),
       steps: List<String>.from(map['steps'] ?? []),
-      // ADD THESE TWO LINES:
       isSensitive: map['isSensitive'] ?? false,
       tags: List<String>.from(map['tags'] ?? []),
       createdBy: map['created_by'] ?? 'admin',
       creatorId: map['creator_id'] ?? '',
+      // MAPPING AGE GROUP (Defaulting to 6 - 8 for safety)
+      ageGroup: map['ageGroup'] ?? '6 - 8',
     );
   }
 
-  // Add toMap() method
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -64,14 +68,14 @@ class StemChallengeReadModel {
       'imageUrl': imageUrl,
       'materials': materials,
       'steps': steps,
-      'isSensitive': isSensitive, // ADD THIS
-      'tags': tags, // ADD THIS
+      'isSensitive': isSensitive,
+      'tags': tags,
       'created_by': createdBy,
       'creator_id': creatorId,
+      'ageGroup': ageGroup, // <--- ADDED TO MAP
     };
   }
 
-  // Updated copyWith method to include isSensitive and tags
   StemChallengeReadModel copyWith({
     String? id,
     String? adminId,
@@ -82,10 +86,11 @@ class StemChallengeReadModel {
     String? imageUrl,
     List<String>? materials,
     List<String>? steps,
-    bool? isSensitive, // ADD THIS
-    List<String>? tags, // ADD THIS
+    bool? isSensitive,
+    List<String>? tags,
     String? createdBy,
     String? creatorId,
+    String? ageGroup, // <--- ADDED TO COPYWITH
   }) {
     return StemChallengeReadModel(
       id: id ?? this.id,
@@ -97,10 +102,11 @@ class StemChallengeReadModel {
       imageUrl: imageUrl ?? this.imageUrl,
       materials: materials ?? this.materials,
       steps: steps ?? this.steps,
-      isSensitive: isSensitive ?? this.isSensitive, // ADD THIS
-      tags: tags ?? this.tags, // ADD THIS
+      isSensitive: isSensitive ?? this.isSensitive,
+      tags: tags ?? this.tags,
       createdBy: createdBy ?? this.createdBy,
       creatorId: creatorId ?? this.creatorId,
+      ageGroup: ageGroup ?? this.ageGroup, // <--- ADDED TO LOGIC
     );
   }
 }

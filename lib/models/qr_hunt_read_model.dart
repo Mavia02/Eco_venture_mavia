@@ -9,6 +9,9 @@ class QrHuntReadModel {
   final String createdBy; // 'admin' or 'teacher'
   final String creatorId;
 
+  // AGE CLASSIFICATION FIELD
+  final String ageGroup; // <--- ADDED THIS FIELD TO RESOLVE ERROR
+
   QrHuntReadModel({
     required this.id,
     required this.title,
@@ -17,6 +20,7 @@ class QrHuntReadModel {
     required this.clues,
     this.createdBy = 'admin',
     this.creatorId = '',
+    required this.ageGroup, // <--- ADDED TO CONSTRUCTOR
   });
 
   factory QrHuntReadModel.fromMap(String id, Map<String, dynamic> map) {
@@ -26,8 +30,10 @@ class QrHuntReadModel {
       points: (map['points'] as num? ?? 0).toInt(),
       difficulty: map['difficulty'] ?? 'Easy',
       clues: List<String>.from(map['clues'] ?? []),
-      createdBy: map['created_by'] ?? 'admin', // Backend must enable this
-      creatorId: map['adminId'] ?? '', // or creator_id
+      createdBy: map['created_by'] ?? 'admin',
+      creatorId: map['adminId'] ?? map['creator_id'] ?? '',
+      // MAPPING AGE GROUP (Defaulting to 6 - 8 for existing data)
+      ageGroup: map['ageGroup'] ?? '6 - 8',
     );
   }
 }

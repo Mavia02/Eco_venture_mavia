@@ -7,18 +7,22 @@ class ChildStemChallengesRepository {
 
   ChildStemChallengesRepository(this._service);
 
-  Stream<List<StemChallengeReadModel>> getAdminChallenges(String category) {
-    return _service.getAdminChallengesStream(category);
+  /// Fetches Admin STEM challenges filtered by category and the child's age group.
+  Stream<List<StemChallengeReadModel>> getAdminChallenges(String category, String studentAgeGroup) {
+    return _service.getAdminChallengesStream(category, studentAgeGroup);
   }
 
-  Stream<List<StemChallengeReadModel>> getTeacherChallenges(String category) {
-    return _service.getTeacherChallengesStream(category);
+  /// Fetches Teacher STEM challenges filtered by category and the child's age group.
+  Stream<List<StemChallengeReadModel>> getTeacherChallenges(String category, String studentAgeGroup) {
+    return _service.getTeacherChallengesStream(category, studentAgeGroup);
   }
 
+  /// Submits a student's challenge attempt to the database.
   Future<void> submitChallenge(StemSubmissionModel submission) async {
     await _service.submitChallenge(submission);
   }
 
+  /// Listens to the history of submissions made by the currently logged-in student.
   Stream<Map<String, StemSubmissionModel>> getSubmissionsStream() {
     return _service.getStudentSubmissionsStream();
   }

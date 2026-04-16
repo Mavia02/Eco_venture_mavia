@@ -2,18 +2,11 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/stem_challenge_read_model.dart';
-import '../models/stem_submission_model.dart';
-import '../services/shared_preferences_helper.dart';
-
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:rxdart/rxdart.dart'; // ADD THIS IMPORT
-import '../services/shared_preferences_helper.dart';
+import 'package:rxdart/rxdart.dart';
 import '../models/stem_challenge_read_model.dart';
 import '../models/stem_submission_model.dart';
 import '../models/parent_safety_settings_model.dart';
+import '../services/shared_preferences_helper.dart';
 
 class ChildStemChallengesService {
   final FirebaseDatabase _database = FirebaseDatabase.instance;
@@ -73,10 +66,10 @@ class ChildStemChallengesService {
   }
 
   // ==================================================
-  //  1. FETCH ADMIN CHALLENGES WITH PARENT FILTERS (YOUR PATTERN)
+  //  1. FETCH ADMIN CHALLENGES (With Age & Parent Filters)
   // ==================================================
 
-  Stream<List<StemChallengeReadModel>> getAdminChallengesStream(String category) {
+  Stream<List<StemChallengeReadModel>> getAdminChallengesStream(String category, String studentAgeGroup) {
     final dataStream = _database.ref('Public/StemChallenges/$category').onValue.map((event) {
       return _parseChallenges(event.snapshot.value);
     }).handleError((e) {
@@ -84,19 +77,19 @@ class ChildStemChallengesService {
       return <StemChallengeReadModel>[];
     });
 
-    // YOUR EXACT PATTERN: Combine with settings and apply filters
+    // Pattern: Combine challenges with safety settings and apply filters (including age)
     return Rx.combineLatest2(dataStream, _getSafetySettings(),
             (List<StemChallengeReadModel> challenges, ParentSafetySettingsModel settings) {
-          return _applyStemFilters(challenges, settings, category);
+          return _applyStemFilters(challenges, settings, category, studentAgeGroup);
         }
     );
   }
 
   // ==================================================
-  //  2. FETCH TEACHER CHALLENGES WITH PARENT FILTERS (YOUR PATTERN)
+  //  2. FETCH TEACHER CHALLENGES (With Age & Parent Filters)
   // ==================================================
 
-  Stream<List<StemChallengeReadModel>> getTeacherChallengesStream(String category) {
+  Stream<List<StemChallengeReadModel>> getTeacherChallengesStream(String category, String studentAgeGroup) {
     return Stream.fromFuture(_getTeacherId()).asyncExpand((teacherId) {
       Stream<List<StemChallengeReadModel>> teacherDataStream;
 
@@ -115,26 +108,33 @@ class ChildStemChallengesService {
 
       final settingsStream = _getSafetySettings();
 
-      // YOUR EXACT PATTERN: Combine with settings and apply filters
+      // Pattern: Combine teacher challenges with safety settings and apply filters (including age)
       return Rx.combineLatest2(teacherDataStream, settingsStream,
               (List<StemChallengeReadModel> challenges, ParentSafetySettingsModel settings) {
-            return _applyStemFilters(challenges, settings, category);
+            return _applyStemFilters(challenges, settings, category, studentAgeGroup);
           }
       );
     });
   }
 
   // ==================================================
-  //  STEM-SPECIFIC FILTER LOGIC (APPROPRIATE FOR STEM CONTENT)
+  //  STEM-SPECIFIC FILTER LOGIC (Age + Safety)
   // ==================================================
 
   List<StemChallengeReadModel> _applyStemFilters(
       List<StemChallengeReadModel> challenges,
       ParentSafetySettingsModel settings,
-      String category) {
+      String category,
+      String studentAgeGroup) {
 
     return challenges.where((challenge) {
-      // 1. Block Dangerous/Inappropriate STEM Content
+      // 1. AGE BRACKET FILTER (PRIMARY CHECK)
+      // Filters tasks based on the student's classification (e.g., 6-8, 8-10, 10-12)
+      if (challenge.ageGroup.trim() != studentAgeGroup.trim()) {
+        return false;
+      }
+
+      // 2. Block Dangerous/Inappropriate STEM Content
       if (settings.blockScaryContent) {
         if (_isDangerousOrInappropriateStem(challenge, category)) {
           print("🚫 Parent blocked inappropriate STEM content: ${challenge.title}");
@@ -142,7 +142,7 @@ class ChildStemChallengesService {
         }
       }
 
-      // 2. Educational Only Mode - STEM Specific
+      // 3. Educational Only Mode - STEM Specific
       if (settings.educationalOnlyMode) {
         if (!_isEducationalStem(challenge, category)) {
           print("📚 Educational mode - blocked non-educational STEM: ${challenge.title}");
@@ -150,7 +150,7 @@ class ChildStemChallengesService {
         }
       }
 
-      // 3. Block Social Interaction for STEM
+      // 4. Block Social Interaction for STEM
       if (settings.blockSocialInteraction) {
         if (_isSocialStemChallenge(challenge)) {
           print("👥 Social interaction blocked for STEM: ${challenge.title}");
@@ -162,7 +162,7 @@ class ChildStemChallengesService {
     }).toList();
   }
 
-  // STEM-SPECIFIC: Check for dangerous or inappropriate STEM content
+  // STEM-SPECIFIC HELPERS (Restored full detailed logic)
   bool _isDangerousOrInappropriateStem(StemChallengeReadModel challenge, String category) {
     // 1. Check if challenge is marked as sensitive
     if (challenge.isSensitive == true) {
@@ -203,18 +203,13 @@ class ChildStemChallengesService {
 
     final categoryLower = category.toLowerCase();
     if (potentiallyDangerousCategories.any((cat) => categoryLower.contains(cat.toLowerCase()))) {
-      // For dangerous categories, also check if it's age-appropriate
-      // This could be enhanced with age restrictions
       return false; // Don't auto-block, just flag for review
     }
 
     return false;
   }
 
-  // STEM-SPECIFIC: Check if content is educational STEM
   bool _isEducationalStem(StemChallengeReadModel challenge, String category) {
-    // STEM is inherently educational, but check for non-educational categories
-
     // 1. Check tags for entertainment vs educational
     if (challenge.tags.isNotEmpty) {
       const educationalStemTags = ['educational', 'learning', 'academic', 'science', 'math'];
@@ -238,42 +233,32 @@ class ChildStemChallengesService {
       'Just for Fun', 'Recreation', 'Leisure'
     ];
 
-    // Check if category is educational STEM
     final isEducationalCategory = educationalStemCategories.any(
             (eduCat) => category.toLowerCase().contains(eduCat.toLowerCase())
     );
 
-    // Check if category is non-educational
     final isNonEducationalCategory = nonEducationalCategories.any(
             (nonEduCat) => category.toLowerCase().contains(nonEduCat.toLowerCase())
     );
 
-    // STEM categories are educational by default
     if (isEducationalCategory) return true;
-
-    // Non-educational categories should be blocked in educational mode
     if (isNonEducationalCategory) return false;
 
-    // Default: Allow STEM challenges (they're usually educational)
     return true;
   }
 
-  // STEM-SPECIFIC: Check if challenge involves social interaction
   bool _isSocialStemChallenge(StemChallengeReadModel challenge) {
-    // STEM social interaction keywords
     const socialStemKeywords = [
       'collaborate', 'teamwork', 'group project', 'pair programming',
       'discuss', 'share results', 'presentation', 'debate',
       'competition', 'contest', 'challenge others', 'multiplayer'
     ];
 
-    // Check title
     final titleLower = challenge.title.toLowerCase();
     if (socialStemKeywords.any((word) => titleLower.contains(word))) {
       return true;
     }
 
-    // Check tags
     if (challenge.tags.isNotEmpty) {
       const socialStemTags = ['collaborative', 'team', 'group', 'social', 'multiplayer', 'competitive'];
       if (challenge.tags.any((tag) => socialStemTags.contains(tag.toLowerCase()))) {
@@ -285,7 +270,7 @@ class ChildStemChallengesService {
   }
 
   // ==================================================
-  //  HELPER PARSER (Keep your existing)
+  //  HELPER PARSER
   // ==================================================
 
   List<StemChallengeReadModel> _parseChallenges(dynamic data) {
@@ -306,50 +291,36 @@ class ChildStemChallengesService {
   }
 
   // ==================================================
-  //  SUBMISSION METHODS (Keep your existing ones - UNCHANGED)
+  //  SUBMISSION METHODS (UNCHANGED)
   // ==================================================
 
   Future<void> submitChallenge(StemSubmissionModel submission) async {
     try {
-      // 1. Get Valid Student ID
-      String? studentId = await SharedPreferencesHelper.instance.getUserId();
-      if (studentId == null) studentId = _auth.currentUser?.uid;
-
+      String? studentId = await SharedPreferencesHelper.instance.getUserId() ?? _auth.currentUser?.uid;
       if (studentId == null) throw Exception("Student not logged in");
 
-      // 2. Prepare Path
-      // Path: student_stem_submissions / student_123 / challenge_abc
       final path = 'student_stem_submissions/$studentId/${submission.challengeId}';
-
-      // 3. Prepare Data (Ensure strict status)
-      // We force the status to 'pending' on new submissions just to be safe,
-      // though the ViewModel/Model usually handles defaults.
       final submissionData = submission.copyWith(
-        studentId: studentId, // Ensure ID matches auth
+        studentId: studentId,
         status: 'pending',
-        teacherFeedback: null, // Reset feedback on new submission
-        pointsAwarded: 0,      // Reset points until approved
+        teacherFeedback: null,
+        pointsAwarded: 0,
       ).toMap();
 
-      // 4. Save to RTDB
       await _database.ref(path).set(submissionData);
-
     } catch (e) {
       throw Exception("Failed to submit challenge: $e");
     }
   }
 
   Stream<Map<String, StemSubmissionModel>> getStudentSubmissionsStream() async* {
-    String? studentId = await SharedPreferencesHelper.instance.getUserId();
-    studentId ??= _auth.currentUser?.uid;
-
+    String? studentId = await SharedPreferencesHelper.instance.getUserId() ?? _auth.currentUser?.uid;
     if (studentId == null) {
       yield {};
       return;
     }
 
     final path = 'student_stem_submissions/$studentId';
-
     yield* _database.ref(path).onValue.map((event) {
       final data = event.snapshot.value;
       if (data == null) return {};

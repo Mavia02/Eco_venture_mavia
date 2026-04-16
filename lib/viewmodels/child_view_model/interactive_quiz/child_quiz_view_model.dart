@@ -2,15 +2,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/child_progress_model.dart';
 import '../../../repositories/child_quiz_repository.dart';
+import '../../../services/shared_preferences_helper.dart'; // Added for Age Group
 import 'child_quiz_state.dart';
 
 class ChildQuizViewModel extends StateNotifier<ChildQuizState> {
   final ChildQuizRepository _repository;
 
-  // Independent Subscriptions
   StreamSubscription? _adminTopicSub;
   StreamSubscription? _teacherTopicSub;
-
   StreamSubscription? _adminCatSub;
   StreamSubscription? _teacherCatSub;
   StreamSubscription? _progressSub;
@@ -20,38 +19,42 @@ class ChildQuizViewModel extends StateNotifier<ChildQuizState> {
     _loadCategories();
   }
 
-  // --- LOAD CATEGORIES (Both Admin & Teacher) ---
   void _loadCategories() {
-    // Admin Cats
     _adminCatSub = _repository.getAdminCategories().listen((cats) {
       state = state.copyWith(adminCategories: cats);
     });
 
-    // Teacher Cats
     _teacherCatSub = _repository.getTeacherCategories().listen((cats) {
       state = state.copyWith(teacherCategories: cats);
     });
   }
 
-  // --- LOAD TOPICS (Controlled separately by UI Dropdowns) ---
+  // --- LOAD TOPICS (Updated to fetch studentAgeGroup first) ---
 
-  void loadAdminTopics(String category) {
+  Future<void> loadAdminTopics(String category) async {
     _adminTopicSub?.cancel();
-    // Don't set global isLoading = true here to avoid flickering the whole screen
-    // Just listen for new data
-    _adminTopicSub = _repository.getAdminTopics(category).listen((topics) {
+
+    // 1. Retrieve age group "Hall Pass"
+    final String ageGroup = await SharedPreferencesHelper.instance.getUserAgeGroup() ?? "6 - 8";
+
+    // 2. Listen for age-filtered topics
+    _adminTopicSub = _repository.getAdminTopics(category, ageGroup).listen((topics) {
       state = state.copyWith(adminTopics: topics);
     });
   }
 
-  void loadTeacherTopics(String category) {
+  Future<void> loadTeacherTopics(String category) async {
     _teacherTopicSub?.cancel();
-    _teacherTopicSub = _repository.getTeacherTopics(category).listen((topics) {
+
+    // 1. Retrieve age group "Hall Pass"
+    final String ageGroup = await SharedPreferencesHelper.instance.getUserAgeGroup() ?? "6 - 8";
+
+    // 2. Listen for age-filtered topics
+    _teacherTopicSub = _repository.getTeacherTopics(category, ageGroup).listen((topics) {
       state = state.copyWith(teacherTopics: topics);
     });
   }
 
-  // --- PROGRESS ---
   void _loadUserProgress() {
     _progressSub = _repository.getProgressStream().listen((progressMap) {
       state = state.copyWith(progress: progressMap);

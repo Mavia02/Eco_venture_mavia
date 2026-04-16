@@ -8,6 +8,7 @@ import '../models/parent_safety_settings_model.dart';
 import '../models/video_model.dart';
 import '../models/story_model.dart';
 import '../services/shared_preferences_helper.dart';
+
 class VideoStoryService {
   final FirebaseDatabase _database = FirebaseDatabase.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -100,7 +101,7 @@ class VideoStoryService {
     }
   }
 
-  Stream<List<VideoModel>> getVideosStream() {
+  Stream<List<VideoModel>> getVideosStream(String studentAgeGroup) {
     final adminStream = _database.ref('Public/Videos').onValue.map((e) => _parseVideos(e.snapshot.value, isTeacher: false));
     final settingsStream = _getSafetySettings();
 
@@ -121,8 +122,8 @@ class VideoStoryService {
               (List<VideoModel> admin, List<VideoModel> teacher, ParentSafetySettingsModel settings) {
             final allVideos = [...admin, ...teacher];
 
-            // Apply multimedia-appropriate filters
-            final filteredVideos = _applyVideoFilters(allVideos, settings);
+            // Apply multimedia-appropriate filters with age classification
+            final filteredVideos = _applyVideoFilters(allVideos, settings, studentAgeGroup);
 
             filteredVideos.sort((a, b) => b.uploadedAt.compareTo(a.uploadedAt));
             return filteredVideos;
@@ -132,9 +133,14 @@ class VideoStoryService {
   }
 
   // VIDEO-SPECIFIC FILTERING LOGIC
-  List<VideoModel> _applyVideoFilters(List<VideoModel> videos, ParentSafetySettingsModel settings) {
+  List<VideoModel> _applyVideoFilters(List<VideoModel> videos, ParentSafetySettingsModel settings, String studentAgeGroup) {
     return videos.where((video) {
-      // 1. Block Scary/Sensitive Video Content
+      // 1. AGE BRACKET FILTER (Primary Classification)
+      if (video.ageGroup.trim() != studentAgeGroup.trim()) {
+        return false;
+      }
+
+      // 2. Block Scary/Sensitive Video Content
       if (settings.blockScaryContent) {
         if (_isInappropriateVideo(video)) {
           print("🚫 Parent blocked inappropriate video: ${video.title}");
@@ -142,7 +148,7 @@ class VideoStoryService {
         }
       }
 
-      // 2. Educational Only Mode for Videos
+      // 3. Educational Only Mode for Videos
       if (settings.educationalOnlyMode) {
         if (!_isEducationalVideo(video)) {
           print("📚 Educational mode - blocked non-educational video: ${video.title}");
@@ -150,7 +156,7 @@ class VideoStoryService {
         }
       }
 
-      // 3. Block Social Interaction for Videos (if applicable)
+      // 4. Block Social Interaction for Videos (if applicable)
       if (settings.blockSocialInteraction) {
         if (_isSocialVideo(video)) {
           print("👥 Social interaction blocked for video: ${video.title}");
@@ -196,7 +202,7 @@ class VideoStoryService {
 
     // 4. Check description if available
     if (video.description != null) {
-      final descLower = video.description!.toLowerCase();
+      final descLower = video.description.toLowerCase();
       if (inappropriateVideoKeywords.any((word) => descLower.contains(word))) {
         return true;
       }
@@ -316,7 +322,7 @@ class VideoStoryService {
 
   // ================= STORIES (DUAL FETCH WITH FILTERING) =================
 
-  Stream<List<StoryModel>> getStoriesStream() {
+  Stream<List<StoryModel>> getStoriesStream(String studentAgeGroup) {
     final adminStream = _database.ref('Public/Stories').onValue.map((e) => _parseStories(e.snapshot.value, isTeacher: false));
     final settingsStream = _getSafetySettings();
 
@@ -337,8 +343,8 @@ class VideoStoryService {
               (List<StoryModel> admin, List<StoryModel> teacher, ParentSafetySettingsModel settings) {
             final allStories = [...admin, ...teacher];
 
-            // Apply story-appropriate filters
-            final filteredStories = _applyStoryFilters(allStories, settings);
+            // Apply story-appropriate filters with age classification
+            final filteredStories = _applyStoryFilters(allStories, settings, studentAgeGroup);
 
             filteredStories.sort((a, b) => b.uploadedAt.compareTo(a.uploadedAt));
             return filteredStories;
@@ -348,9 +354,14 @@ class VideoStoryService {
   }
 
   // STORY-SPECIFIC FILTERING LOGIC
-  List<StoryModel> _applyStoryFilters(List<StoryModel> stories, ParentSafetySettingsModel settings) {
+  List<StoryModel> _applyStoryFilters(List<StoryModel> stories, ParentSafetySettingsModel settings, String studentAgeGroup) {
     return stories.where((story) {
-      // 1. Block Scary/Sensitive Story Content
+      // 1. AGE BRACKET FILTER (Primary Classification)
+      if (story.ageGroup.trim() != studentAgeGroup.trim()) {
+        return false;
+      }
+
+      // 2. Block Scary/Sensitive Story Content
       if (settings.blockScaryContent) {
         if (_isInappropriateStory(story)) {
           print("🚫 Parent blocked inappropriate story: ${story.title}");
@@ -358,7 +369,7 @@ class VideoStoryService {
         }
       }
 
-      // 2. Educational Only Mode for Stories
+      // 3. Educational Only Mode for Stories
       if (settings.educationalOnlyMode) {
         if (!_isEducationalStory(story)) {
           print("📚 Educational mode - blocked non-educational story: ${story.title}");
@@ -366,7 +377,7 @@ class VideoStoryService {
         }
       }
 
-      // 3. Block Social Interaction for Stories (if applicable)
+      // 4. Block Social Interaction for Stories (if applicable)
       if (settings.blockSocialInteraction) {
         if (_isSocialStory(story)) {
           print("👥 Social interaction blocked for story: ${story.title}");
