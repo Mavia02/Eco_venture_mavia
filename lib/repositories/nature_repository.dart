@@ -20,21 +20,36 @@ class NatureRepository {
       String userId,
       ) async {
     // 1. PARALLEL EXECUTION: Start Prediction & Upload at the same time
-    // This is great for performance!
     final results = await Future.wait([
       _modalService.predictImage(imageFile), // Index 0
       _cloudinaryService.uploadChildNaturePhotoImage(imageFile), // Index 1
     ]);
 
-    final prediction = results[0] as NaturePrediction;
+    NaturePrediction prediction = results[0] as NaturePrediction;
     final imageUrl = results[1] as String?;
 
     if (imageUrl == null) throw Exception("Image upload failed");
 
+    // --- ANTI-ANNOYANCE GUARD ---
+    // If the model is less than 70% sure, we treat it as "Unknown"
+
+    bool isUnsure = prediction.confidence < 0.70;
+
     // 2. DATA CONSISTENCY:
-    // We fetch the full NatureFact object from SQLite using the label from the AI.
-    // This object contains the 'category' and 'description' you need.
-    final NatureFact fact = await _localDbService.getFactFor(prediction.label);
+    // Fetch the fact. If we are unsure, we fetch the "unknown" fact from your DB.
+    final NatureFact fact = await _localDbService.getFactFor(
+        isUnsure ? "unknown" : prediction.label
+    );
+
+    // If unsure, we override the prediction display label too
+    if (isUnsure) {
+      prediction = NaturePrediction(
+        label: "Unknown",
+        confidence: prediction.confidence,
+        description: "We couldn't quite identify this one. Try a clearer photo!",
+        category: "Unknown",
+      );
+    }
 
     // 3. CREATE ENTRY OBJECT
     final String entryId = const Uuid().v4();
@@ -50,13 +65,11 @@ class NatureRepository {
     // 4. ATOMIC SAVE: Update Journal AND Activity at the exact same time
     final Map<String, dynamic> updates = {};
 
-    // Path for the User's Journal
     updates['/users/$userId/journal/$entryId'] = entry.toMap();
 
-    // Path for Admin/Parent Activity Tracking
     updates['/activities/$userId/$entryId'] = {
-      'title': "Discovered a ${fact.name}",
-      'category': fact.category, // FIX: Access category from 'fact', not 'prediction'
+      'title': isUnsure ? "Spotted something mysterious" : "Discovered a ${fact.name}",
+      'category': fact.category,
       'timestamp': entry.timestamp.toIso8601String(),
       'imageUrl': imageUrl,
     };
@@ -70,7 +83,6 @@ class NatureRepository {
   Future<void> deleteEntry(String userId, String entryId) async {
     final Map<String, dynamic> updates = {};
 
-    // Setting a path to 'null' in Firebase deletes it
     updates['/users/$userId/journal/$entryId'] = null;
     updates['/activities/$userId/$entryId'] = null;
 
@@ -81,10 +93,8 @@ class NatureRepository {
   Future<void> updateEntry(String userId, JournalEntry updatedEntry) async {
     final Map<String, dynamic> updates = {};
 
-    // Overwrite the existing entry with new data
     updates['/users/$userId/journal/${updatedEntry.id}'] = updatedEntry.toMap();
 
-    // We optionally update the activity title too, in case the name changed
     updates['/activities/$userId/${updatedEntry.id}/title'] =
     "Discovered a ${updatedEntry.prediction.label}";
 
