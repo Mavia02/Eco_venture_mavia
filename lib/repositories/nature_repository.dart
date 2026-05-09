@@ -3,23 +3,24 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:uuid/uuid.dart';
 import '../models/nature_fact_{sqllite}.dart';
 import '../models/nature_photo_predictiion{ai}.dart';
-import '../services/nature_photo_modal_service.dart';
+import '../services/nature_photo_modal_service.dart'; // Updated to match the new file name
 import '../services/cloudinary_service.dart';
 import '../services/nature_photo_sqlflite.dart';
 import '../models/nature_photo_upload_model.dart';
 
 class NatureRepository {
+  // Use the updated ModalService that handles raw bytes and 448px resolution
   final ModalService _modalService = ModalService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final LocalDBService _localDbService = LocalDBService();
   final FirebaseDatabase _firebase = FirebaseDatabase.instance;
 
   Future<JournalEntry> processAndSaveEntry(
-    File imageFile,
-    String userId,
-  ) async {
+      File imageFile,
+      String userId,
+      ) async {
     // 1. PARALLEL EXECUTION: Start Prediction & Upload at the same time
-    // This makes the app much faster!
+    // This is great for performance!
     final results = await Future.wait([
       _modalService.predictImage(imageFile), // Index 0
       _cloudinaryService.uploadChildNaturePhotoImage(imageFile), // Index 1
@@ -30,7 +31,9 @@ class NatureRepository {
 
     if (imageUrl == null) throw Exception("Image upload failed");
 
-    // 2. LOCAL LOOKUP: Get facts instantly from SQLite
+    // 2. DATA CONSISTENCY:
+    // We fetch the full NatureFact object from SQLite using the label from the AI.
+    // This object contains the 'category' and 'description' you need.
     final NatureFact fact = await _localDbService.getFactFor(prediction.label);
 
     // 3. CREATE ENTRY OBJECT
@@ -53,7 +56,7 @@ class NatureRepository {
     // Path for Admin/Parent Activity Tracking
     updates['/activities/$userId/$entryId'] = {
       'title': "Discovered a ${fact.name}",
-      'category': fact.category,
+      'category': fact.category, // FIX: Access category from 'fact', not 'prediction'
       'timestamp': entry.timestamp.toIso8601String(),
       'imageUrl': imageUrl,
     };
@@ -62,8 +65,6 @@ class NatureRepository {
 
     return entry;
   }
-
-  // --- NEW LOGIC ADDED BELOW ---
 
   // 5. DELETE ENTRY: Removes from Journal AND Activity log
   Future<void> deleteEntry(String userId, String entryId) async {
@@ -85,7 +86,7 @@ class NatureRepository {
 
     // We optionally update the activity title too, in case the name changed
     updates['/activities/$userId/${updatedEntry.id}/title'] =
-        "Discovered a ${updatedEntry.prediction.label}";
+    "Discovered a ${updatedEntry.prediction.label}";
 
     await _firebase.ref().update(updates);
   }

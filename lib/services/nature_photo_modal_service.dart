@@ -5,31 +5,46 @@ import '../models/nature_photo_predictiion{ai}.dart';
 import 'nature_photo_sqlflite.dart'; // Import your LocalDBService
 
 class ModalService {
-  final String _endpointUrl = "https://muhammadmavia540--yolo8-object-detection-api-predict.modal.run";
+  // Use the verified predict-v2 endpoint
+  final String _endpointUrl = "https://muhammadmavia540--predict-v2.modal.run";
   final LocalDBService _dbService = LocalDBService(); // DB instance
 
   Future<NaturePrediction> predictImage(File imageFile) async {
     try {
-      var request = http.MultipartRequest('POST', Uri.parse(_endpointUrl));
-      request.files.add(await http.MultipartFile.fromPath('file', imageFile.path));
+      // 1. Read the image as raw bytes (Matching our Postman Binary success)
+      final bytes = await imageFile.readAsBytes();
 
-      var response = await request.send();
+      // 2. Send a direct POST request
+      final response = await http.post(
+        Uri.parse(_endpointUrl),
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
+        body: bytes,
+      );
 
       if (response.statusCode == 200) {
-        var responseData = await response.stream.toBytes();
-        var responseString = String.fromCharCodes(responseData);
-        var json = jsonDecode(responseString);
+        final json = jsonDecode(response.body);
 
-        // Normalize label from model
-        String rawLabel = (json['label'] as String).trim().toLowerCase();
+        // 3. KEY FIX: Use 'prediction' instead of 'label'
+        String rawLabel = (json['prediction'] as String).trim().toLowerCase();
+
+        // 4. CONFIDENCE FIX: Convert "97.07%" string to double 0.9707
+        double confidenceValue = 0.0;
+        if (json['confidence'] != null) {
+          String confStr = json['confidence'].toString().replaceAll('%', '');
+          confidenceValue = double.parse(confStr) / 100.0;
+        }
+
+        // Normalize label for SQL search
         String normalizedLabel = _normalizeLabel(rawLabel);
 
-        // Query local DB for description
+        // Query local DB for description based on our 91% accuracy brain result
         var fact = await _dbService.getFactFor(normalizedLabel);
 
         return NaturePrediction(
-          label: fact.name,
-          confidence: json['confidence'] ?? 0.0,
+          label: fact.name, // Display name from DB
+          confidence: confidenceValue,
           description: fact.description,
           category: fact.category,
         );
@@ -38,15 +53,17 @@ class ModalService {
       }
     } catch (e) {
       print("Modal Error: $e");
+      // Fallback if anything fails
       return NaturePrediction(
         label: "Unknown",
         confidence: 0.0,
-        description: "We are still learning about this!",
+        description: "We are still learning about this! Please check your connection and try again.",
         category: "Unknown",
       );
     }
   }
 
+  /// Ensures the labels coming from the AI match the keys in your SQLite database
   String _normalizeLabel(String label) {
     String temp = label.trim().toLowerCase().replaceAll(' ', '_');
 
@@ -58,11 +75,12 @@ class ModalService {
       "burnet": "burnet",
       "cactus": "cactus",
       "cockroach": "cockroach",
-      "dafodil": "dafodils",
+      "dafodils": "dafodils",
       "daffodil": "dafodils",
       "elephant": "elephant",
       "fly": "fly",
       "giraffe": "giraffe",
+      "girraffe": "giraffe", // Added fix for common misspelling in datasets
       "grasshopper": "grasshopper",
       "ladybug": "ladybugs",
       "ladybugs": "ladybugs",
@@ -70,9 +88,9 @@ class ModalService {
       "mango": "mango",
       "neem": "neem",
       "ostrich": "ostrich",
-      "palm tree": "palm_tree",
+      "palm_tree": "palm_tree",
       "pipal": "pipal",
-      "purple cornflower": "purple_cornflower",
+      "purple_cornflower": "purple_cornflower",
       "sunflower": "sunflower",
       "turtle": "turtle",
       "zebra": "zebra",
@@ -81,5 +99,4 @@ class ModalService {
 
     return labelMap[temp] ?? temp;
   }
-
 }
