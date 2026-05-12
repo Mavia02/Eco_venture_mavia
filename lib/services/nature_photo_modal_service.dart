@@ -11,10 +11,10 @@ class ModalService {
 
   Future<NaturePrediction> predictImage(File imageFile) async {
     try {
-      // 1. Read the image as raw bytes (Matching our Postman Binary success)
+      // 1. Read the image as raw bytes
       final bytes = await imageFile.readAsBytes();
 
-      // 2. Send a direct POST request
+      // 2. Send direct POST request
       final response = await http.post(
         Uri.parse(_endpointUrl),
         headers: {
@@ -26,24 +26,34 @@ class ModalService {
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
 
-        // 3. KEY FIX: Use 'prediction' instead of 'label'
-        String rawLabel = (json['prediction'] as String).trim().toLowerCase();
-
-        // 4. CONFIDENCE FIX: Convert "97.07%" string to double 0.9707
+        // 3. Parse Confidence: Convert "29.74%" string to double 0.2974
         double confidenceValue = 0.0;
         if (json['confidence'] != null) {
           String confStr = json['confidence'].toString().replaceAll('%', '');
           confidenceValue = double.parse(confStr) / 100.0;
         }
 
-        // Normalize label for SQL search
+        // --- 🛡️ THE CONFIDENCE GUARD ---
+        // If confidence is below 70%, we stop here and return "Unknown"
+        // This prevents the "29.74% Cat" issue from reaching your UI.
+        if (confidenceValue < 0.70) {
+          return NaturePrediction(
+            label: "Unknown",
+            confidence: confidenceValue,
+            description: "I'm not quite sure what this is. Please take a clearer photo of an animal or plant!",
+            category: "Unknown",
+          );
+        }
+
+        // 4. PROCESS SUCCESSFUL PREDICTION
+        String rawLabel = (json['prediction'] as String).trim().toLowerCase();
         String normalizedLabel = _normalizeLabel(rawLabel);
 
-        // Query local DB for description based on our 91% accuracy brain result
+        // Query local DB for the specific fact
         var fact = await _dbService.getFactFor(normalizedLabel);
 
         return NaturePrediction(
-          label: fact.name, // Display name from DB
+          label: fact.name,
           confidence: confidenceValue,
           description: fact.description,
           category: fact.category,
@@ -53,17 +63,16 @@ class ModalService {
       }
     } catch (e) {
       print("Modal Error: $e");
-      // Fallback if anything fails
       return NaturePrediction(
         label: "Unknown",
         confidence: 0.0,
-        description: "We are still learning about this! Please check your connection and try again.",
+        description: "We are still learning about this! Check your connection and try again.",
         category: "Unknown",
       );
     }
   }
 
-  /// Ensures the labels coming from the AI match the keys in your SQLite database
+  /// Ensures labels match your SQLite database keys
   String _normalizeLabel(String label) {
     String temp = label.trim().toLowerCase().replaceAll(' ', '_');
 
@@ -80,7 +89,7 @@ class ModalService {
       "elephant": "elephant",
       "fly": "fly",
       "giraffe": "giraffe",
-      "girraffe": "giraffe", // Added fix for common misspelling in datasets
+      "girraffe": "giraffe",
       "grasshopper": "grasshopper",
       "ladybug": "ladybugs",
       "ladybugs": "ladybugs",
