@@ -18,10 +18,9 @@ class NatureRepository {
       File imageFile,
       String userId,
       ) async {
-    // 1. We keep your optimized parallel logic to save user time
     final results = await Future.wait([
-      _modalService.predictImage(imageFile), // Index 0
-      _cloudinaryService.uploadChildNaturePhotoImage(imageFile), // Index 1
+      _modalService.predictImage(imageFile),
+      _cloudinaryService.uploadChildNaturePhotoImage(imageFile),
     ]);
 
     NaturePrediction prediction = results[0] as NaturePrediction;
@@ -29,17 +28,14 @@ class NatureRepository {
 
     if (imageUrl == null) throw Exception("Image upload failed");
 
-    // 2. ANTI-ANNOYANCE GUARD
-    // If confidence is low (like the 29% case), we treat the discovery as "Unknown"
-    bool isUnsure = prediction.confidence < 0.70 || prediction.label == "Unknown";
+    // --- ANTI-ANNOYANCE GUARD ---
+    // <comment-tag>Ensured this check matches the service threshold of 0.80 for consistency.</comment-tag>
+    bool isUnsure = prediction.confidence < 0.80 || prediction.label == "Unknown";
 
-    // 3. FETCH DATA: Get facts from SQLite.
-    // If unsure, we look for the "unknown" record in your local DB.
     final NatureFact fact = await _localDbService.getFactFor(
-        isUnsure ? "unknown" : prediction.label
+        isUnsure ? "unknown" : _normalizeForSql(prediction.label)
     );
 
-    // Override the prediction details if we are unsure
     if (isUnsure) {
       prediction = NaturePrediction(
         label: "Unknown",
@@ -49,7 +45,6 @@ class NatureRepository {
       );
     }
 
-    // 4. CREATE ENTRY OBJECT
     final String entryId = const Uuid().v4();
     final entry = JournalEntry(
       id: entryId,
@@ -60,12 +55,9 @@ class NatureRepository {
       fact: fact,
     );
 
-    // 5. ATOMIC SAVE: Keep your logic to update Journal and Activity feed at once
     final Map<String, dynamic> updates = {};
-
     updates['/users/$userId/journal/$entryId'] = entry.toMap();
 
-    // We use a professional title if the AI is unsure
     updates['/activities/$userId/$entryId'] = {
       'title': isUnsure ? "Spotted something mysterious" : "Discovered a ${fact.name}",
       'category': fact.category,
@@ -74,11 +66,12 @@ class NatureRepository {
     };
 
     await _firebase.ref().update(updates);
-
     return entry;
   }
 
-  // 6. DELETE ENTRY: Removes from Journal AND Activity log
+  // <comment-tag>Added a helper to ensure that the label being sent to SQL is lowercase and trimmed, preventing lookup failures.</comment-tag>
+  String _normalizeForSql(String label) => label.trim().toLowerCase().replaceAll(' ', '_');
+
   Future<void> deleteEntry(String userId, String entryId) async {
     final Map<String, dynamic> updates = {};
     updates['/users/$userId/journal/$entryId'] = null;
@@ -86,12 +79,10 @@ class NatureRepository {
     await _firebase.ref().update(updates);
   }
 
-  // 7. UPDATE ENTRY: Saves changes to an existing card
   Future<void> updateEntry(String userId, JournalEntry updatedEntry) async {
     final Map<String, dynamic> updates = {};
     updates['/users/$userId/journal/${updatedEntry.id}'] = updatedEntry.toMap();
-    updates['/activities/$userId/${updatedEntry.id}/title'] =
-    "Discovered a ${updatedEntry.prediction.label}";
+    updates['/activities/$userId/${updatedEntry.id}/title'] = "Discovered a ${updatedEntry.prediction.label}";
     await _firebase.ref().update(updates);
   }
 }

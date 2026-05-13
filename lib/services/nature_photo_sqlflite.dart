@@ -2,7 +2,6 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/nature_fact_{sqllite}.dart';
 
-
 class LocalDBService {
   static Database? _database;
 
@@ -33,11 +32,13 @@ class LocalDBService {
     );
   }
 
-  // ✅ FIXED + LOWERCASE MATCHING WITH MODEL LABELS
   Future<void> _seedData(Database db) async {
     print("🌱 Seeding Database with Model Labels...");
 
     final List<Map<String, String>> facts = [
+      // --- THE PROTECTOR ENTRY ---
+      // This ensures that when AI is unsure, we show a professional message.
+      {'name': 'unknown', 'category': 'Unknown', 'description': "I'm not quite sure what this is. Please take a clearer photo of a plant or animal!"},
 
       // ===== ANIMALS =====
       {'name': 'cat', 'category': 'Animal', 'description': 'A small fluffy mammal that loves to chase mice.'},
@@ -77,17 +78,11 @@ class LocalDBService {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     }
-
-    print("✅ Seeded ${facts.length} labels correctly!");
   }
 
-  // ✅ ✅ ✅ FIXED SEARCH FUNCTION (THIS WAS YOUR MAIN BUG)
   Future<NatureFact> getFactFor(String label) async {
     final db = await database;
-
     String cleanLabel = label.trim().toLowerCase();
-
-    print("🔍 Searching DB for: $cleanLabel");
 
     final List<Map<String, dynamic>> maps = await db.query(
       'nature_facts',
@@ -96,14 +91,12 @@ class LocalDBService {
     );
 
     if (maps.isNotEmpty) {
-      print("✅ MATCH FOUND: ${maps.first['name']}");
       return NatureFact.fromMap(maps.first);
     } else {
-      print("❌ NO MATCH FOUND — Showing Unknown Message");
-
+      // Fallback if the label isn't in our DB at all
       return NatureFact(
-        name: cleanLabel,
-        description: "You found a $cleanLabel! That is amazing, but I am still learning about it.",
+        name: "Unknown",
+        description: "I'm still learning about this species. Try another photo!",
         category: "Unknown",
       );
     }

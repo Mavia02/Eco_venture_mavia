@@ -11,8 +11,8 @@ class ApiConstants {
 
   // Use your deployed Render backend
 
- // Use your deployed Render backend
- static const String baseUrl = "https://eco-venture-backend.onrender.com/";
+ // Use your deployed vercel backend
+ static const String baseUrl = "https://eco-venture-backend.vercel.app/";
 
  // Auth Endpoints
  static const String signInEndpoint = "${baseUrl}signIn";
