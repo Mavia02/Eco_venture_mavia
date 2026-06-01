@@ -18,6 +18,7 @@ class NatureRepository {
       File imageFile,
       String userId,
       ) async {
+    // 1. Parallel Execution to optimize processing speed
     final results = await Future.wait([
       _modalService.predictImage(imageFile),
       _cloudinaryService.uploadChildNaturePhotoImage(imageFile),
@@ -29,13 +30,21 @@ class NatureRepository {
     if (imageUrl == null) throw Exception("Image upload failed");
 
     // --- ANTI-ANNOYANCE GUARD ---
-    // <comment-tag>Ensured this check matches the service threshold of 0.80 for consistency.</comment-tag>
-    bool isUnsure = prediction.confidence < 0.80 || prediction.label == "Unknown";
+    // Safely intercepts both confidence violations and explicit server-fallback 'unknown' labels
+    bool isUnsure = prediction.confidence < 0.80 ||
+        prediction.label.trim().toLowerCase() == "unknown";
 
+    print("DEBUG: --- REPOSITORY PROCESSING ---");
+    print("DEBUG: Prediction Label: ${prediction.label}");
+    print("DEBUG: Prediction Confidence: ${prediction.confidence}");
+    print("DEBUG: Is Unsure Flag: $isUnsure");
+
+    // Fetch facts from SQLite local DB
     final NatureFact fact = await _localDbService.getFactFor(
         isUnsure ? "unknown" : _normalizeForSql(prediction.label)
     );
 
+    // Normalize output structure on UI presentation card if classified as unsure
     if (isUnsure) {
       prediction = NaturePrediction(
         label: "Unknown",
@@ -55,6 +64,7 @@ class NatureRepository {
       fact: fact,
     );
 
+    // Atomic database update sequence for Firebase
     final Map<String, dynamic> updates = {};
     updates['/users/$userId/journal/$entryId'] = entry.toMap();
 
@@ -66,10 +76,11 @@ class NatureRepository {
     };
 
     await _firebase.ref().update(updates);
+    print("DEBUG: Entry successfully synchronized to Firebase!");
     return entry;
   }
 
-  // <comment-tag>Added a helper to ensure that the label being sent to SQL is lowercase and trimmed, preventing lookup failures.</comment-tag>
+  // Ensures that the label being sent to SQLite is lowercase and trimmed
   String _normalizeForSql(String label) => label.trim().toLowerCase().replaceAll(' ', '_');
 
   Future<void> deleteEntry(String userId, String entryId) async {
